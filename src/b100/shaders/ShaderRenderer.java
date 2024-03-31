@@ -17,17 +17,27 @@ import org.lwjgl.input.Keyboard;
 import org.lwjgl.opengl.Display;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.render.PostProcessingManager;
 import net.minecraft.client.render.Renderer;
+import net.minecraft.core.entity.player.EntityPlayer;
+import net.minecraft.core.util.helper.MathHelper;
+import net.minecraft.core.world.World;
+import net.minecraft.core.world.season.Season;
+import net.minecraft.core.world.season.Seasons;
+import net.minecraft.core.world.type.WorldTypes;
 
 public class ShaderRenderer extends Renderer {
 	
-	private List<Shader> postShaders;
-	private List<Shader> baseShaders;
+	private final List<RenderPass> postRenderPasses = new ArrayList<>();
+	private final List<RenderPass> baseRenderPasses = new ArrayList<>();
+	
+	// Don't build strings every frame
+	private static final String[] colortexStrings = new String[] {"colortex0", "colortex1", "colortex2", "colortex3", "colortex4", "colortex5", "colortex6", "colortex7"};
 	
 	private boolean isSetup = false;
 	
-	private final Framebuffer gameFramebuffer = new Framebuffer();
-	private final Framebuffer worldFramebuffer = new Framebuffer();
+	private final Framebuffer baseFramebuffer = new Framebuffer();
+	private final Framebuffer postFramebuffer = new Framebuffer();
 	
 	private int fullscreenRectList = 0;
 	
@@ -37,9 +47,14 @@ public class ShaderRenderer extends Renderer {
 	private IntBuffer intBuffer = ByteBuffer.allocateDirect(64).order(ByteOrder.nativeOrder()).asIntBuffer();
 
 	private boolean enableShaders = true;
+	private boolean showTextures = false;
 	
 	private boolean pressedReloadLast = false;
 	private boolean pressedToggleLast = false;
+	private boolean pressedShowTexturesLast = false;
+	
+	private long startTime = System.currentTimeMillis();
+	private float frameTimeCounter = 0;
 	
 	public ShaderRenderer(Minecraft mc) {
 		super(mc);
@@ -51,52 +66,66 @@ public class ShaderRenderer extends Renderer {
 		isSetup = true;
 		
 		checkError("pre setup");
-		
-		if(postShaders != null) {
-			for(int i=0; i < postShaders.size(); i++) {
-				postShaders.get(i).delete();
-			}
-		}
-		if(baseShaders != null) {
-			for(int i=0; i < baseShaders.size(); i++) {
-				baseShaders.get(i).delete();
-			}
-		}
-		gameFramebuffer.delete();
-		worldFramebuffer.delete();
 
+		delete();
+		
 		checkError("delete");
-		
-		ShaderMod.log("Shader setup!");
-		
-		String[] postNames = new String[0];
-		String[] baseNames = new String[] {"composite", "final"};
-		
-		postShaders = new ArrayList<>();
-		baseShaders = new ArrayList<>();
 
-		for(int i=0; i < postNames.length; i++) {
-			Shader shader = new Shader();
-			String name = postNames[i];
-			boolean success = shader.setupShader(name);
-			ShaderMod.log(name + ": " + success);
-			postShaders.add(shader);
+		ShaderMod.log("Shader setup!");
+		boolean success;
+		
+		{
+			RenderPass renderPass = new RenderPass();
+			renderPass.shader = new Shader();
+			success = renderPass.shader.setupShader("composite");
+			renderPass.in = new int[] {0};
+			renderPass.out = new int[] {1, 2};
+			baseRenderPasses.add(renderPass);
+			ShaderMod.log("composite: " + success);
+		}
+		{
+			RenderPass renderPass = new RenderPass();
+			renderPass.shader = new Shader();
+			success = renderPass.shader.setupShader("final");
+			renderPass.in = new int[] {1, 2};
+			renderPass.out = new int[] {0};
+			baseRenderPasses.add(renderPass);
+			ShaderMod.log("final: " + success);
 		}
 		
-		for(int i=0; i < baseNames.length; i++) {
-			Shader shader = new Shader();
-			String name = baseNames[i];
-			boolean success = shader.setupShader(name);
-			ShaderMod.log(name + ": " + success);
-			baseShaders.add(shader);
-		}
+		boolean[] baseMipmap = new boolean[] {true, false, false};
+		boolean[] postMipmap = new boolean[] {false};
 		
-		gameFramebuffer.create(3);
-		worldFramebuffer.create(1);
+		int baseTextureCount = getTextureCount(baseRenderPasses);
+		int postTextureCount = getTextureCount(postRenderPasses);
+		
+		ShaderMod.log("Base Textures: " + baseTextureCount);
+		ShaderMod.log("Post Textures: " + postTextureCount);
+		
+		baseFramebuffer.create(baseTextureCount, baseMipmap);
+		postFramebuffer.create(postTextureCount, postMipmap);
 		
 		setupFramebuffers();
 		
 		checkError("setup");
+	}
+	
+	private int getTextureCount(List<RenderPass> renderPasses) {
+		int textureCount = 0;
+		for(int i=0; i < renderPasses.size(); i++) {
+			RenderPass rp = renderPasses.get(i);
+			if(rp.in != null) {
+				for(int j=0; j < rp.in.length; j++) {
+					textureCount = Math.max(textureCount, rp.in[j]);
+				}
+			}
+			if(rp.out != null) {
+				for(int j=0; j < rp.out.length; j++) {
+					textureCount = Math.max(textureCount, rp.out[j]);
+				}
+			}
+		}
+		return textureCount + 1;
 	}
 	
 	private void setupFramebuffers() {
@@ -108,10 +137,10 @@ public class ShaderRenderer extends Renderer {
 		this.framebufferWidth = width;
 		this.framebufferHeight = height;
 		
-		gameFramebuffer.setup(width, height);
+		baseFramebuffer.setup(width, height);
 		checkFramebufferStatus();
 		
-		worldFramebuffer.setup(width, height);
+		postFramebuffer.setup(width, height);
 		checkFramebufferStatus();
 		
 		checkError("framebuffer setup");
@@ -137,7 +166,7 @@ public class ShaderRenderer extends Renderer {
 		if(Display.getWidth() != framebufferWidth || Display.getHeight() != framebufferHeight) {
 			setupFramebuffers();
 		}
-
+		
 		boolean pressedReload = Keyboard.isKeyDown(Keyboard.KEY_F7);
 		if(pressedReload != pressedReloadLast) {
 			pressedReloadLast = pressedReload;
@@ -147,6 +176,7 @@ public class ShaderRenderer extends Renderer {
 				enableShaders = true;
 			}
 		}
+		
 		boolean pressedToggle = Keyboard.isKeyDown(Keyboard.KEY_F6);
 		if(pressedToggle != pressedToggleLast) {
 			pressedToggleLast = pressedToggle;
@@ -156,16 +186,34 @@ public class ShaderRenderer extends Renderer {
 			}
 		}
 		
+		boolean pressedShowTextures = Keyboard.isKeyDown(Keyboard.KEY_F8);
+		if(pressedShowTextures != pressedShowTexturesLast) {
+			pressedShowTexturesLast = pressedShowTextures;
+			if(pressedShowTextures) {
+				showTextures = !showTextures;
+				ShaderMod.log("Show Textures: " + showTextures);
+			}
+		}
+		
 		if(!enableShaders) {
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
 			return;
 		}
 		
-		if(baseShaders.size() > 0) {
-			glBindFramebuffer(GL_FRAMEBUFFER, gameFramebuffer.id);
-			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gameFramebuffer.colortex[0], 0);	
+		long now = System.currentTimeMillis();
+		int passedTime = (int) (now - startTime);
+		frameTimeCounter = passedTime / 1000.0f;
+		
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		
+		if(baseRenderPasses.size() > 0) {
+			glBindFramebuffer(GL_FRAMEBUFFER, baseFramebuffer.id);
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, baseFramebuffer.colortex[0], 0);	
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, 0, 0);
 			glDrawBuffers(GL_COLOR_ATTACHMENT0);
 		}
+
+		glEnable(GL_DEPTH_TEST);
 		
 		checkError("begin render game");
 	}
@@ -178,6 +226,13 @@ public class ShaderRenderer extends Renderer {
 			return;
 		}
 		
+		if(postRenderPasses.size() > 0) {
+			glBindFramebuffer(GL_FRAMEBUFFER, postFramebuffer.id);
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, postFramebuffer.colortex[0], 0);	
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, 0, 0);
+			glDrawBuffers(GL_COLOR_ATTACHMENT0);
+		}
+		
 		checkError("begin render world");
 	}
 	
@@ -188,6 +243,12 @@ public class ShaderRenderer extends Renderer {
 		if(!enableShaders) {
 			return;
 		}
+
+		if(postRenderPasses.size() > 0) {
+			endRender(postRenderPasses, postFramebuffer, baseRenderPasses.size() > 0 ? baseFramebuffer.id : 0, true);
+		}
+		
+		glEnable(GL_ALPHA_TEST);
 		
 		checkError("end render world");
 	}
@@ -200,61 +261,122 @@ public class ShaderRenderer extends Renderer {
 			return;
 		}
 		
-		if(baseShaders.size() > 0) {
-			// Pass 1
-			// Render Texture [0] into [1, 2]
-			
-			glBindFramebuffer(GL_FRAMEBUFFER, gameFramebuffer.id);
-			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gameFramebuffer.colortex[1], 0);
-			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, gameFramebuffer.colortex[2], 0);
-			intBuffer.position(0).limit(2);
-			intBuffer.put(GL_COLOR_ATTACHMENT0);
-			intBuffer.put(GL_COLOR_ATTACHMENT1);
-			intBuffer.position(0);
-			glDrawBuffers(intBuffer);
-			
-			Shader shaderComposite = baseShaders.get(0);
-			if(shaderComposite.bind()) {
-				setupCommonUniforms(shaderComposite);
-
-				glActiveTexture(GL_TEXTURE0);
-				glBindTexture(GL_TEXTURE_2D, gameFramebuffer.colortex[0]);
-				glGenerateMipmap(GL_TEXTURE_2D);
-				glUniform1i(shaderComposite.getUniform("colortex0"), 0);
-			}else {
-				glBindTexture(GL_TEXTURE_2D, gameFramebuffer.colortex[0]);
-			}
-			drawFramebuffer();
-			
-			glBindFramebuffer(GL_FRAMEBUFFER, 0);
-			
-			// Pass 2
-			// Render Textures [1, 2] into [0]
-			
-			Shader shaderFinal = baseShaders.get(1);
-			if(shaderFinal.bind()) {
-				setupCommonUniforms(shaderFinal);
-
-				glActiveTexture(GL_TEXTURE0);
-				glBindTexture(GL_TEXTURE_2D, gameFramebuffer.colortex[1]);
-				glUniform1i(shaderFinal.getUniform("colortex0"), 0);
-				
-				glActiveTexture(GL_TEXTURE1);
-				glBindTexture(GL_TEXTURE_2D, gameFramebuffer.colortex[2]);
-				glUniform1i(shaderFinal.getUniform("colortex1"), 1);
-				
-				glActiveTexture(GL_TEXTURE0);
-			}else {
-				glBindTexture(GL_TEXTURE_2D, gameFramebuffer.colortex[1]);
-			}
-			
-			glBindFramebuffer(GL_FRAMEBUFFER, 0);
-			drawFramebuffer();
-			
-			glUseProgram(0);
+		if(baseRenderPasses.size() > 0) {
+			endRender(baseRenderPasses, baseFramebuffer, 0, false);
 		}
 		
 		checkError("end render game");
+		
+		if(showTextures) {
+			int pos = 0;
+			if(baseRenderPasses.size() > 0) {
+				showTextures(baseFramebuffer, pos++);
+			}
+			if(postRenderPasses.size() > 0) {
+				showTextures(postFramebuffer, pos++);
+			}
+		}
+	}
+	
+	public void endRender(List<RenderPass> renderPasses, Framebuffer framebuffer, int endFramebuffer, boolean enableDepthTex) {
+		glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.id);
+		
+		int count = renderPasses.size();
+		
+		for(int renderPassIndex = 0; renderPassIndex < count; renderPassIndex++) {
+			RenderPass renderPass = renderPasses.get(renderPassIndex);
+			boolean last = renderPassIndex == count - 1;
+			
+			if(renderPass.shader.bind()) {
+				// Setup input textures
+				setupCommonUniforms(renderPass.shader);
+				
+				for(int inIndex=0; inIndex < renderPass.in.length; inIndex++) {
+					glActiveTexture(GL_TEXTURE0 + inIndex);
+					glBindTexture(GL_TEXTURE_2D, framebuffer.colortex[renderPass.in[inIndex]]);
+					glUniform1i(renderPass.shader.getUniform(colortexStrings[inIndex]), inIndex);
+					
+					if(framebuffer.mipmap[renderPass.in[inIndex]]) {
+						glGenerateMipmap(GL_TEXTURE_2D);
+					}
+				}
+				
+				if(enableDepthTex) {
+					int depthTex = renderPass.in.length;
+					glActiveTexture(GL_TEXTURE0 + depthTex);
+					glBindTexture(GL_TEXTURE_2D, framebuffer.depthtex);
+					glUniform1i(renderPass.shader.getUniform("depthtex0"), depthTex);
+				}
+				
+				glActiveTexture(GL_TEXTURE0);
+			}else {
+				// Shader not compiled,
+				// just draw first input texture
+				glBindTexture(GL_TEXTURE_2D, framebuffer.colortex[renderPass.in[0]]);
+			}
+			
+			if(!last) {
+				// Not last renderpass, set target buffers
+				intBuffer.position(0).limit(renderPass.out.length);
+				for(int outIndex=0; outIndex < renderPass.out.length; outIndex++) {
+					glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + outIndex, GL_TEXTURE_2D, framebuffer.colortex[renderPass.out[outIndex]], 0);
+					intBuffer.put(GL_COLOR_ATTACHMENT0 + outIndex);
+				}
+				intBuffer.position(0);
+				glDrawBuffers(intBuffer);
+			}else {
+				glDrawBuffers(GL_COLOR_ATTACHMENT0);
+			}
+			
+			if(last) {
+				glBindFramebuffer(GL_FRAMEBUFFER, endFramebuffer);
+			}
+			
+			drawFramebuffer();
+		}
+		
+		glUseProgram(0);
+	}
+	
+	public void showTextures(Framebuffer framebuffer, int pos) {
+		// Debug
+		glDisable(GL_DEPTH_TEST);
+		glDisable(GL_ALPHA_TEST);
+		glPushMatrix();
+		glScaled(0.14, 0.14, 1.0);
+		glTranslated(0.1, 0.1, 0.0);
+		if(pos == 1) {
+			glTranslated(0.0, 1.1, 0.0);	
+		}
+		
+		for(int i=0; i < framebuffer.colortex.length; i++) {
+			glBindTexture(GL_TEXTURE_2D, framebuffer.colortex[i]);
+
+			double pad = 0.02;
+			glDisable(GL_TEXTURE_2D);
+			glBegin(GL_QUADS);
+			glVertex2d(-pad, -pad);
+			glVertex2d(-pad, 1.0 + pad);
+			glVertex2d(1.0 + pad, 1.0 + pad);
+			glVertex2d(1.0 + pad, -pad);
+			glEnd();
+
+			glEnable(GL_TEXTURE_2D);
+			glBegin(GL_QUADS);
+			glTexCoord2d(0.0, 0.0);
+			glVertex2d(0.0, 0.0);
+			glTexCoord2d(0.0, 1.0);
+			glVertex2d(0.0, 1.0);
+			glTexCoord2d(1.0, 1.0);
+			glVertex2d(1.0, 1.0);
+			glTexCoord2d(1.0, 0.0);
+			glVertex2d(1.0, 0.0);
+			glEnd();
+			
+			glTranslated(1.1, 0.0, 0.0);
+		}
+		
+		glPopMatrix();
 	}
 	
 	private void setupCommonUniforms(Shader shader) {
@@ -262,6 +384,65 @@ public class ShaderRenderer extends Renderer {
 		
 		glUniform1f(shader.getUniform("viewWidth"), Display.getWidth());
 		glUniform1f(shader.getUniform("viewHeight"), Display.getHeight());
+
+		boolean spring = false;
+		boolean summer = false;
+		boolean autumn = false;
+		boolean winter = false;
+		
+		float biomeTemperature = 0.7f;
+		
+		float sunAngle = 0.0f;
+		
+		boolean nether = false;
+		boolean paradise = false;
+		
+		if(mc.theWorld != null && mc.thePlayer != null) {
+			World world = mc.theWorld;
+			EntityPlayer player = mc.thePlayer;
+			
+			Season currentSeason = world.seasonManager.getCurrentSeason(); 
+			
+			spring = currentSeason == Seasons.OVERWORLD_SPRING;
+			summer = currentSeason == Seasons.OVERWORLD_SUMMER;
+			autumn = currentSeason == Seasons.OVERWORLD_FALL;
+			winter = currentSeason == Seasons.OVERWORLD_WINTER || currentSeason == Seasons.OVERWORLD_WINTER_ENDLESS;
+			
+			int playerX = MathHelper.floor_double(player.x);
+			int playerZ = MathHelper.floor_double(player.z);
+			
+			biomeTemperature = (float) world.getBlockTemperature(playerX, playerZ);
+			
+			sunAngle = world.getCelestialAngle(1.0f);
+			
+			nether = world.worldType == WorldTypes.NETHER_DEFAULT;
+			paradise = world.worldType == WorldTypes.PARADISE_DEFAULT;
+		}
+
+		glUniform1f(shader.getUniform("spring"), spring ? 1.0f : 0.0f);
+		glUniform1f(shader.getUniform("summer"), summer ? 1.0f : 0.0f);
+		glUniform1f(shader.getUniform("autumn"), autumn ? 1.0f : 0.0f);
+		glUniform1f(shader.getUniform("winter"), winter ? 1.0f : 0.0f);
+		
+		glUniform1f(shader.getUniform("biomeTemperature"), biomeTemperature);
+		glUniform1f(shader.getUniform("sunAngle"), sunAngle);
+
+		glUniform1f(shader.getUniform("nether"), nether ? 1.0f : 0.0f);
+		glUniform1f(shader.getUniform("paradise"), paradise ? 1.0f : 0.0f);
+		
+		glUniform1f(shader.getUniform("frameTimeCounter"), frameTimeCounter);
+		
+		PostProcessingManager ppm = mc.ppm;
+		glUniform1f(shader.getUniform("brightness"), ppm.brightness);
+		glUniform1f(shader.getUniform("contrast"), ppm.contrast);
+		glUniform1f(shader.getUniform("exposure"), ppm.exposure);
+		glUniform1f(shader.getUniform("saturation"), ppm.saturation);
+		glUniform1f(shader.getUniform("rMod"), ppm.rMod);
+		glUniform1f(shader.getUniform("gMod"), ppm.gMod);
+		glUniform1f(shader.getUniform("bMod"), ppm.bMod);
+		
+		glUniform1f(shader.getUniform("fxaa"), mc.gameSettings.fxaa.value);
+		glUniform1i(shader.getUniform("bloom"), mc.gameSettings.bloom.value);
 		
 		checkError("uniforms");
 	}
@@ -325,8 +506,18 @@ public class ShaderRenderer extends Renderer {
 		glCallList(fullscreenRectList);
 	}
 	
-	public void destroy() {
-		
+	@Override
+	public void delete() {
+		baseFramebuffer.delete();
+		postFramebuffer.delete();
+		for(int i=0; i < baseRenderPasses.size(); i++) {
+			baseRenderPasses.get(i).shader.delete();
+		}
+		for(int i=0; i < postRenderPasses.size(); i++) {
+			postRenderPasses.get(i).shader.delete();
+		}
+		baseRenderPasses.clear();
+		postRenderPasses.clear();
 	}
 	
 	static class Framebuffer {
@@ -334,8 +525,9 @@ public class ShaderRenderer extends Renderer {
 		int id;
 		int[] colortex;
 		int depthtex;
+		boolean[] mipmap;
 		
-		void create(int colorTextures) {
+		void create(int colorTextures, boolean[] mipmap) {
 			id = glGenFramebuffers();
 			
 			colortex = new int[colorTextures];
@@ -344,20 +536,21 @@ public class ShaderRenderer extends Renderer {
 			}
 			
 			depthtex = glGenTextures();
+			this.mipmap = mipmap;
 		}
 		
 		void setup(int width, int height) {
 			glBindFramebuffer(GL_FRAMEBUFFER, id);
 			
 			for(int i=0; i < colortex.length; i++) {
-				boolean mipmap = i == 0;
+				boolean mipmapTex = mipmap[i];
 				
 				glBindTexture(GL_TEXTURE_2D, colortex[i]);
 				glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, (ByteBuffer) null);
-				if(mipmap) glGenerateMipmap(GL_TEXTURE_2D);
+				if(mipmapTex) glGenerateMipmap(GL_TEXTURE_2D);
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, mipmap ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, mipmapTex ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 				glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colortex[i], 0);
 			}
@@ -397,6 +590,24 @@ public class ShaderRenderer extends Renderer {
 			}
 		}
 		
+	}
+	
+	public static class RenderPass {
+		
+		public Shader shader;
+		public int[] in;
+		public int[] out;
+		
+	}
+	
+	public static boolean isNullOrZeroArray(int[] arr) {
+		if(arr == null) {
+			return true;
+		}
+		if(arr.length != 1) {
+			return false;
+		}
+		return arr[0] == 0;
 	}
 
 }
