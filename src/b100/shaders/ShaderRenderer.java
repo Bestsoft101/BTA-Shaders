@@ -7,6 +7,7 @@ import static org.lwjgl.opengl.GL15.*;
 import static org.lwjgl.opengl.GL20.*;
 import static org.lwjgl.opengl.GL30.*;
 
+import java.io.File;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.IntBuffer;
@@ -16,6 +17,10 @@ import java.util.List;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.opengl.Display;
 
+import b100.json.JsonParser;
+import b100.json.element.JsonArray;
+import b100.json.element.JsonEntry;
+import b100.json.element.JsonObject;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.render.PostProcessingManager;
 import net.minecraft.client.render.Renderer;
@@ -70,47 +75,111 @@ public class ShaderRenderer extends Renderer {
 		delete();
 		
 		checkError("delete");
-
+		
 		ShaderMod.log("Shader setup!");
-		boolean success;
 		
-		{
-			RenderPass renderPass = new RenderPass();
-			renderPass.shader = new Shader();
-			success = renderPass.shader.setupShader("composite");
-			renderPass.in = new int[] {0};
-			renderPass.out = new int[] {1, 2};
-			baseRenderPasses.add(renderPass);
-			ShaderMod.log("composite: " + success);
-		}
-		{
-			RenderPass renderPass = new RenderPass();
-			renderPass.shader = new Shader();
-			success = renderPass.shader.setupShader("final");
-			renderPass.in = new int[] {1, 2};
-			renderPass.out = new int[] {0};
-			baseRenderPasses.add(renderPass);
-			ShaderMod.log("final: " + success);
-		}
-		
-		boolean[] baseMipmap = new boolean[] {true, false, false};
-		boolean[] postMipmap = new boolean[] {false};
-		
-		int baseTextureCount = getTextureCount(baseRenderPasses);
-		int postTextureCount = getTextureCount(postRenderPasses);
-		
-		ShaderMod.log("Base Textures: " + baseTextureCount);
-		ShaderMod.log("Post Textures: " + postTextureCount);
-		
-		baseFramebuffer.create(baseTextureCount, baseMipmap);
-		postFramebuffer.create(postTextureCount, postMipmap);
+		loadRenderPassConfig();
 		
 		setupFramebuffers();
 		
 		checkError("setup");
 	}
 	
-	private int getTextureCount(List<RenderPass> renderPasses) {
+	public void loadRenderPassConfig() {
+		try {
+			File shaderJson = new File(ShaderMod.getCurrentShaderPackDirectory(), "shader.json");
+			JsonObject root = JsonParser.instance.parseFileContent(shaderJson);
+
+			if(root == null) {
+				ShaderMod.log("Missing shader.json!");
+				
+				// TODO Load internal default config
+				
+				return;
+			}else {
+				ShaderMod.log("Loading shader.json");
+				
+				JsonObject base = root.getObject("base");
+				JsonObject post = root.getObject("post");
+				
+				if(base != null) {
+					parseRenderConfig(base, baseRenderPasses, baseFramebuffer);
+				}
+				if(post != null) {
+					parseRenderConfig(post, postRenderPasses, postFramebuffer);
+				}
+			}
+			
+			ShaderMod.log("Render Passes: " + baseRenderPasses.size() + " Base, " + postRenderPasses.size() + " Post");
+			ShaderMod.log("Color Textures: " + baseFramebuffer.colortex.length + " Base, " + postFramebuffer.colortex.length + " Post");
+		}catch (Exception e) {
+			System.err.println("Shader setup error!");
+			e.printStackTrace();
+			
+			baseRenderPasses.clear();
+			postRenderPasses.clear();
+			
+			baseFramebuffer.delete();
+			postFramebuffer.delete();
+			
+			baseFramebuffer.create(1, new boolean[] { false });
+			postFramebuffer.create(1, new boolean[] { false });
+		}
+	}
+	
+	public void parseRenderConfig(JsonObject object, List<RenderPass> renderPasses, Framebuffer framebuffer) {
+		JsonObject render = object.getObject("render");
+		
+		if(render != null) {
+			List<JsonEntry> entries = render.entryList();
+			for(int i=0; i < entries.size(); i++) {
+				JsonEntry entry = entries.get(i);
+				
+				RenderPass renderPass = new RenderPass();
+
+				renderPass.shader = new Shader();
+				renderPass.shader.setupShader(entry.name);
+				
+				JsonObject obj = entry.value.getAsObject();
+				
+				if(i > 0) {
+					renderPass.in = parseIntArray(obj.getArray("in"));
+				}else {
+					renderPass.in = new int[] {0};
+				}
+				
+				if(i < entries.size() - 1) {
+					renderPass.out = parseIntArray(obj.getArray("out"));
+				}else {
+					renderPass.out = new int[] {0};
+				}
+				
+				renderPasses.add(renderPass);
+			}
+		}
+		
+		int textureCount = getTextureCount(renderPasses);
+		
+		boolean[] mipmap = new boolean[textureCount];
+		
+		JsonObject textureConfig = object.getObject("textures");
+		if(textureConfig != null) {
+			List<JsonEntry> entries = textureConfig.entryList();
+			for(int i=0; i < entries.size(); i++) {
+				JsonEntry entry = entries.get(i);
+				int textureID = Integer.parseInt(entry.name);
+				
+				JsonObject obj = entry.value.getAsObject();
+				if(obj.has("mipmap")) {
+					mipmap[textureID] = obj.getBoolean("mipmap");
+				}
+			}
+		}
+		
+		framebuffer.create(textureCount, mipmap);
+	}
+	
+	public int getTextureCount(List<RenderPass> renderPasses) {
 		int textureCount = 0;
 		for(int i=0; i < renderPasses.size(); i++) {
 			RenderPass rp = renderPasses.get(i);
@@ -128,7 +197,7 @@ public class ShaderRenderer extends Renderer {
 		return textureCount + 1;
 	}
 	
-	private void setupFramebuffers() {
+	public void setupFramebuffers() {
 		int width = Display.getWidth();
 		int height = Display.getHeight();
 		
@@ -208,7 +277,7 @@ public class ShaderRenderer extends Renderer {
 		
 		if(baseRenderPasses.size() > 0) {
 			glBindFramebuffer(GL_FRAMEBUFFER, baseFramebuffer.id);
-			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, baseFramebuffer.colortex[0], 0);	
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, baseFramebuffer.colortex[0], 0);
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, 0, 0);
 			glDrawBuffers(GL_COLOR_ATTACHMENT0);
 		}
@@ -228,7 +297,7 @@ public class ShaderRenderer extends Renderer {
 		
 		if(postRenderPasses.size() > 0) {
 			glBindFramebuffer(GL_FRAMEBUFFER, postFramebuffer.id);
-			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, postFramebuffer.colortex[0], 0);	
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, postFramebuffer.colortex[0], 0);
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, 0, 0);
 			glDrawBuffers(GL_COLOR_ATTACHMENT0);
 		}
@@ -245,7 +314,7 @@ public class ShaderRenderer extends Renderer {
 		}
 
 		if(postRenderPasses.size() > 0) {
-			endRender(postRenderPasses, postFramebuffer, baseRenderPasses.size() > 0 ? baseFramebuffer.id : 0, true);
+			postProcessPipeline(postRenderPasses, postFramebuffer, baseRenderPasses.size() > 0 ? baseFramebuffer.id : 0, true);
 		}
 		
 		glEnable(GL_ALPHA_TEST);
@@ -262,7 +331,7 @@ public class ShaderRenderer extends Renderer {
 		}
 		
 		if(baseRenderPasses.size() > 0) {
-			endRender(baseRenderPasses, baseFramebuffer, 0, false);
+			postProcessPipeline(baseRenderPasses, baseFramebuffer, 0, false);
 		}
 		
 		checkError("end render game");
@@ -278,7 +347,7 @@ public class ShaderRenderer extends Renderer {
 		}
 	}
 	
-	public void endRender(List<RenderPass> renderPasses, Framebuffer framebuffer, int endFramebuffer, boolean enableDepthTex) {
+	public void postProcessPipeline(List<RenderPass> renderPasses, Framebuffer framebuffer, int endFramebuffer, boolean enableDepthTex) {
 		glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.id);
 		
 		int count = renderPasses.size();
@@ -418,7 +487,7 @@ public class ShaderRenderer extends Renderer {
 			nether = world.worldType == WorldTypes.NETHER_DEFAULT;
 			paradise = world.worldType == WorldTypes.PARADISE_DEFAULT;
 		}
-
+		
 		glUniform1f(shader.getUniform("spring"), spring ? 1.0f : 0.0f);
 		glUniform1f(shader.getUniform("summer"), summer ? 1.0f : 0.0f);
 		glUniform1f(shader.getUniform("autumn"), autumn ? 1.0f : 0.0f);
@@ -431,6 +500,12 @@ public class ShaderRenderer extends Renderer {
 		glUniform1f(shader.getUniform("paradise"), paradise ? 1.0f : 0.0f);
 		
 		glUniform1f(shader.getUniform("frameTimeCounter"), frameTimeCounter);
+
+		glUniform1f(shader.getUniform("gamma"), mc.gameSettings.gamma.value);
+		glUniform1f(shader.getUniform("colorCorrection"), mc.gameSettings.colorCorrection.value);
+		glUniform1f(shader.getUniform("fxaa"), mc.gameSettings.fxaa.value);
+		glUniform1i(shader.getUniform("bloom"), mc.gameSettings.bloom.value);
+		glUniform1i(shader.getUniform("heatHaze"), mc.gameSettings.heatHaze.value ? 1 : 0);
 		
 		PostProcessingManager ppm = mc.ppm;
 		glUniform1f(shader.getUniform("brightness"), ppm.brightness);
@@ -440,9 +515,6 @@ public class ShaderRenderer extends Renderer {
 		glUniform1f(shader.getUniform("rMod"), ppm.rMod);
 		glUniform1f(shader.getUniform("gMod"), ppm.gMod);
 		glUniform1f(shader.getUniform("bMod"), ppm.bMod);
-		
-		glUniform1f(shader.getUniform("fxaa"), mc.gameSettings.fxaa.value);
-		glUniform1i(shader.getUniform("bloom"), mc.gameSettings.bloom.value);
 		
 		checkError("uniforms");
 	}
@@ -586,7 +658,7 @@ public class ShaderRenderer extends Renderer {
 			}
 			if(depthtex != 0) {
 				glDeleteTextures(depthtex);
-				depthtex = 0;	
+				depthtex = 0;
 			}
 		}
 		
@@ -608,6 +680,16 @@ public class ShaderRenderer extends Renderer {
 			return false;
 		}
 		return arr[0] == 0;
+	}
+	
+	public static int[] parseIntArray(JsonArray jsonArray) {
+		int[] intArray = new int[jsonArray.length()];
+		
+		for(int i=0; i < intArray.length; i++) {
+			intArray[i] = jsonArray.get(i).getAsNumber().getInteger();
+		}
+		
+		return intArray;
 	}
 
 }

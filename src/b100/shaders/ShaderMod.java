@@ -24,6 +24,10 @@ public class ShaderMod {
 		return shaderDirectory;
 	}
 	
+	public static File getCurrentShaderPackDirectory() {
+		return shaderDirectory;
+	}
+	
 	public static void log(String string) {
 		System.out.print("[ShaderMod] " + string + "\n");
 	}

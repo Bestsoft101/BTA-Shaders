@@ -80,7 +80,7 @@ public class Shader {
 	}
 	
 	public String getShaderSource(String name) {
-		File shaderFile = new File(ShaderMod.getShaderDirectory(), name);
+		File shaderFile = new File(ShaderMod.getCurrentShaderPackDirectory(), name);
 		if(!shaderFile.exists()) {
 			return null;
 		}
