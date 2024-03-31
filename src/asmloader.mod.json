@@ -1,0 +1,7 @@
+{
+	"modid": "shaders",
+	"version": "DEV",
+	"transformers": [
+		"b100.shaders.asm.Transformers"
+	]
+}
