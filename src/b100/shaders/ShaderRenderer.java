@@ -16,6 +16,7 @@ import java.util.List;
 
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.opengl.Display;
+import org.lwjgl.util.vector.Matrix4f;
 
 import b100.json.JsonParser;
 import b100.json.element.JsonArray;
@@ -31,7 +32,7 @@ import net.minecraft.core.world.season.Season;
 import net.minecraft.core.world.season.Seasons;
 import net.minecraft.core.world.type.WorldTypes;
 
-public class ShaderRenderer extends Renderer {
+public class ShaderRenderer extends Renderer implements CustomRenderer {
 	
 	private final List<RenderPass> postRenderPasses = new ArrayList<>();
 	private final List<RenderPass> baseRenderPasses = new ArrayList<>();
@@ -40,9 +41,15 @@ public class ShaderRenderer extends Renderer {
 	private static final String[] colortexStrings = new String[] {"colortex0", "colortex1", "colortex2", "colortex3", "colortex4", "colortex5", "colortex6", "colortex7"};
 	
 	private boolean isSetup = false;
-	
+
+	private final Framebuffer shadowFramebuffer = new Framebuffer();
 	private final Framebuffer baseFramebuffer = new Framebuffer();
 	private final Framebuffer postFramebuffer = new Framebuffer();
+	
+	private boolean enableShadowmap = false;
+	public boolean isRenderingShadowmap;
+	public int shadowMapResolution = 1024;
+	public float shadowDistance = 64.0f;
 	
 	private int fullscreenRectList = 0;
 	
@@ -60,6 +67,15 @@ public class ShaderRenderer extends Renderer {
 	
 	private long startTime = System.currentTimeMillis();
 	private float frameTimeCounter = 0;
+
+	private Matrix4f shadowProjectionMatrix = new Matrix4f();
+	private Matrix4f shadowModelViewMatrix = new Matrix4f();
+
+	private Matrix4f projectionMatrix = new Matrix4f();
+	private Matrix4f modelViewMatrix = new Matrix4f();
+
+	private Matrix4f projectionInverseMatrix = new Matrix4f();
+	private Matrix4f modelViewInverseMatrix = new Matrix4f();
 	
 	public ShaderRenderer(Minecraft mc) {
 		super(mc);
@@ -108,19 +124,24 @@ public class ShaderRenderer extends Renderer {
 				if(post != null) {
 					parseRenderConfig(post, postRenderPasses, postFramebuffer);
 				}
+				
+				JsonObject shadow = root.getObject("shadow");
+				if(shadow != null) {
+					enableShadowmap = shadow.getBoolean("enable");
+					if(enableShadowmap) {
+						shadowFramebuffer.create(0, null);	
+					}
+				}
 			}
 			
 			ShaderMod.log("Render Passes: " + baseRenderPasses.size() + " Base, " + postRenderPasses.size() + " Post");
 			ShaderMod.log("Color Textures: " + baseFramebuffer.colortex.length + " Base, " + postFramebuffer.colortex.length + " Post");
+			ShaderMod.log("Enable Shadowmap: " + enableShadowmap);
 		}catch (Exception e) {
 			System.err.println("Shader setup error!");
 			e.printStackTrace();
 			
-			baseRenderPasses.clear();
-			postRenderPasses.clear();
-			
-			baseFramebuffer.delete();
-			postFramebuffer.delete();
+			delete();
 			
 			baseFramebuffer.create(1, new boolean[] { false });
 			postFramebuffer.create(1, new boolean[] { false });
@@ -212,6 +233,11 @@ public class ShaderRenderer extends Renderer {
 		postFramebuffer.setup(width, height);
 		checkFramebufferStatus();
 		
+		if(enableShadowmap) {
+			shadowFramebuffer.setup(shadowMapResolution, shadowMapResolution);
+			checkFramebufferStatus();
+		}
+		
 		checkError("framebuffer setup");
 		
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -286,13 +312,85 @@ public class ShaderRenderer extends Renderer {
 		
 		checkError("begin render game");
 	}
+
+	@Override
+	public boolean beforeSetupCameraTransform(float partialTicks) {
+		if(enableShadowmap && isRenderingShadowmap) {
+			glMatrixMode(GL_PROJECTION);
+			glLoadIdentity();
+			glOrtho(-shadowDistance, shadowDistance, -shadowDistance, shadowDistance, -shadowDistance, shadowDistance);
+			glMatrixMode(GL_MODELVIEW);
+			glLoadIdentity();
+			
+			double renderPosX = mc.activeCamera.getX(partialTicks);
+			double renderPosY = mc.activeCamera.getY(partialTicks);
+			double renderPosZ = mc.activeCamera.getZ(partialTicks);
+			
+			glRotatef(90.0f, 0.0f, 1.0f, 0.0f);
+			float sunAngle = mc.theWorld.getCelestialAngle(partialTicks);
+			
+			if(sunAngle > 0.25f && sunAngle < 0.75f) {
+				sunAngle += 0.5f;
+			}
+			
+			glRotatef(sunAngle * 360.0f + 90.0f, 0.0f, 0.0f, 1.0f);
+
+			glTranslated(renderPosX % 8.0, renderPosY % 8.0, renderPosZ % 8.0);
+			
+			MatrixHelper.getMatrix(GL_PROJECTION_MATRIX, shadowProjectionMatrix);
+			MatrixHelper.getMatrix(GL_MODELVIEW_MATRIX, shadowModelViewMatrix);
+			
+			return true;
+		}
+		return false;
+	}
+
+	@Override
+	public void afterSetupCameraTransform(float partialTicks) {
+		if(!isRenderingShadowmap) {
+			MatrixHelper.getMatrix(GL_PROJECTION_MATRIX, projectionMatrix);
+			MatrixHelper.getMatrix(GL_MODELVIEW_MATRIX, modelViewMatrix);
+			
+			Matrix4f.invert(projectionMatrix, projectionInverseMatrix);
+			Matrix4f.invert(modelViewMatrix, modelViewInverseMatrix);
+		}
+	}
 	
 	@Override
 	public void beginRenderWorld(float partialTicks) {
+		if(isRenderingShadowmap) {
+			return;
+		}
+		
 		checkError("pre begin render world");
 
 		if(!enableShaders) {
 			return;
+		}
+		
+		if(enableShadowmap && mc.theWorld != null && mc.thePlayer != null) {
+			Integer prevImmersiveMode = mc.gameSettings.immersiveMode.value;
+			Boolean prevClouds = mc.gameSettings.clouds.value;
+			
+			try {
+				mc.gameSettings.immersiveMode.value = 2;	// Hide Hand
+				mc.gameSettings.clouds.value = false;
+				
+				isRenderingShadowmap = true;
+				glViewport(0, 0, shadowMapResolution, shadowMapResolution);
+				
+				glBindFramebuffer(GL_FRAMEBUFFER, shadowFramebuffer.id);
+				
+				mc.worldRenderer.renderWorld(partialTicks, 0L);
+				
+				glBindFramebuffer(GL_FRAMEBUFFER, 0);
+				isRenderingShadowmap = false;
+			}finally {
+				mc.gameSettings.immersiveMode.value = prevImmersiveMode;
+				mc.gameSettings.clouds.value = prevClouds;
+			}
+			
+			glViewport(0, 0, mc.resolution.width, mc.resolution.height);
 		}
 		
 		if(postRenderPasses.size() > 0) {
@@ -307,6 +405,10 @@ public class ShaderRenderer extends Renderer {
 	
 	@Override
 	public void endRenderWorld(float partialTicks) {
+		if(isRenderingShadowmap) {
+			return;
+		}
+		
 		checkError("pre end render world");
 
 		if(!enableShaders) {
@@ -314,7 +416,7 @@ public class ShaderRenderer extends Renderer {
 		}
 
 		if(postRenderPasses.size() > 0) {
-			postProcessPipeline(postRenderPasses, postFramebuffer, baseRenderPasses.size() > 0 ? baseFramebuffer.id : 0, true);
+			postProcessPipeline(postRenderPasses, postFramebuffer, baseRenderPasses.size() > 0 ? baseFramebuffer.id : 0, true, 0);
 		}
 		
 		glEnable(GL_ALPHA_TEST);
@@ -329,14 +431,27 @@ public class ShaderRenderer extends Renderer {
 		if(!enableShaders) {
 			return;
 		}
-		
+
 		if(baseRenderPasses.size() > 0) {
-			postProcessPipeline(baseRenderPasses, baseFramebuffer, 0, false);
+			postProcessPipeline(baseRenderPasses, baseFramebuffer, 0, false, 1);
 		}
 		
 		checkError("end render game");
+
+		glUseProgram(0);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		
 		if(showTextures) {
+			glDisable(GL_DEPTH_TEST);
+			glDisable(GL_ALPHA_TEST);
+			glDisable(GL_BLEND);
+			
+			glMatrixMode(GL_PROJECTION);
+			glLoadIdentity();
+			glOrtho(0, 1, 0, 1, -1, 1);
+			glMatrixMode(GL_MODELVIEW);
+			glLoadIdentity();
+			
 			int pos = 0;
 			if(baseRenderPasses.size() > 0) {
 				showTextures(baseFramebuffer, pos++);
@@ -344,10 +459,13 @@ public class ShaderRenderer extends Renderer {
 			if(postRenderPasses.size() > 0) {
 				showTextures(postFramebuffer, pos++);
 			}
+			if(enableShadowmap) {
+				showTextures(shadowFramebuffer, pos++);
+			}
 		}
 	}
 	
-	public void postProcessPipeline(List<RenderPass> renderPasses, Framebuffer framebuffer, int endFramebuffer, boolean enableDepthTex) {
+	public void postProcessPipeline(List<RenderPass> renderPasses, Framebuffer framebuffer, int endFramebuffer, boolean enableDepthTex, int stage) {
 		glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.id);
 		
 		int count = renderPasses.size();
@@ -358,7 +476,7 @@ public class ShaderRenderer extends Renderer {
 			
 			if(renderPass.shader.bind()) {
 				// Setup input textures
-				setupCommonUniforms(renderPass.shader);
+				setupCommonUniforms(renderPass.shader, stage);
 				
 				for(int inIndex=0; inIndex < renderPass.in.length; inIndex++) {
 					glActiveTexture(GL_TEXTURE0 + inIndex);
@@ -375,6 +493,13 @@ public class ShaderRenderer extends Renderer {
 					glActiveTexture(GL_TEXTURE0 + depthTex);
 					glBindTexture(GL_TEXTURE_2D, framebuffer.depthtex);
 					glUniform1i(renderPass.shader.getUniform("depthtex0"), depthTex);
+					
+					if(enableShadowmap) {
+						int shadowTex = depthTex + 1;
+						glActiveTexture(GL_TEXTURE0 + shadowTex);
+						glBindTexture(GL_TEXTURE_2D, shadowFramebuffer.depthtex);
+						glUniform1i(renderPass.shader.getUniform("shadowtex0"), shadowTex);
+					}
 				}
 				
 				glActiveTexture(GL_TEXTURE0);
@@ -409,37 +534,40 @@ public class ShaderRenderer extends Renderer {
 	
 	public void showTextures(Framebuffer framebuffer, int pos) {
 		// Debug
-		glDisable(GL_DEPTH_TEST);
-		glDisable(GL_ALPHA_TEST);
 		glPushMatrix();
-		glScaled(0.14, 0.14, 1.0);
+		glScaled(0.24, 0.24, 1.0);
 		glTranslated(0.1, 0.1, 0.0);
 		if(pos == 1) {
 			glTranslated(0.0, 1.1, 0.0);	
 		}
 		
-		for(int i=0; i < framebuffer.colortex.length; i++) {
-			glBindTexture(GL_TEXTURE_2D, framebuffer.colortex[i]);
+		for(int i=0; i < framebuffer.colortex.length + 1; i++) {
+			int tex = i >= framebuffer.colortex.length ? framebuffer.depthtex : framebuffer.colortex[i];
+			glBindTexture(GL_TEXTURE_2D, tex);
 
 			double pad = 0.02;
 			glDisable(GL_TEXTURE_2D);
 			glBegin(GL_QUADS);
 			glVertex2d(-pad, -pad);
-			glVertex2d(-pad, 1.0 + pad);
-			glVertex2d(1.0 + pad, 1.0 + pad);
 			glVertex2d(1.0 + pad, -pad);
+			glVertex2d(1.0 + pad, 1.0 + pad);
+			glVertex2d(-pad, 1.0 + pad);
 			glEnd();
 
 			glEnable(GL_TEXTURE_2D);
 			glBegin(GL_QUADS);
+			
 			glTexCoord2d(0.0, 0.0);
 			glVertex2d(0.0, 0.0);
-			glTexCoord2d(0.0, 1.0);
-			glVertex2d(0.0, 1.0);
-			glTexCoord2d(1.0, 1.0);
-			glVertex2d(1.0, 1.0);
+			
 			glTexCoord2d(1.0, 0.0);
 			glVertex2d(1.0, 0.0);
+			
+			glTexCoord2d(1.0, 1.0);
+			glVertex2d(1.0, 1.0);
+			
+			glTexCoord2d(0.0, 1.0);
+			glVertex2d(0.0, 1.0);
 			glEnd();
 			
 			glTranslated(1.1, 0.0, 0.0);
@@ -448,12 +576,19 @@ public class ShaderRenderer extends Renderer {
 		glPopMatrix();
 	}
 	
-	private void setupCommonUniforms(Shader shader) {
+	private void setupCommonUniforms(Shader shader, int stage) {
 		checkError("pre uniforms");
 		
 		glUniform1f(shader.getUniform("viewWidth"), Display.getWidth());
 		glUniform1f(shader.getUniform("viewHeight"), Display.getHeight());
 
+		if(stage == 0 && enableShadowmap) {
+			MatrixHelper.uniformMatrix(shader.getUniform("shadowProjection"), shadowProjectionMatrix);
+			MatrixHelper.uniformMatrix(shader.getUniform("shadowModelView"), shadowModelViewMatrix);
+			MatrixHelper.uniformMatrix(shader.getUniform("gbufferProjectionInverse"), projectionInverseMatrix);
+			MatrixHelper.uniformMatrix(shader.getUniform("gbufferModelViewInverse"), modelViewInverseMatrix);
+		}
+		
 		boolean spring = false;
 		boolean summer = false;
 		boolean autumn = false;
@@ -582,6 +717,7 @@ public class ShaderRenderer extends Renderer {
 	public void delete() {
 		baseFramebuffer.delete();
 		postFramebuffer.delete();
+		shadowFramebuffer.delete();
 		for(int i=0; i < baseRenderPasses.size(); i++) {
 			baseRenderPasses.get(i).shader.delete();
 		}
@@ -590,6 +726,8 @@ public class ShaderRenderer extends Renderer {
 		}
 		baseRenderPasses.clear();
 		postRenderPasses.clear();
+		
+		enableShadowmap = false;
 	}
 	
 	static class Framebuffer {
