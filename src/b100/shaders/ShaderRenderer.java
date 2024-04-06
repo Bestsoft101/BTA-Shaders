@@ -25,12 +25,13 @@ import b100.json.element.JsonObject;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.render.PostProcessingManager;
 import net.minecraft.client.render.Renderer;
+import net.minecraft.client.render.camera.CameraUtil;
+import net.minecraft.core.block.material.Material;
 import net.minecraft.core.entity.player.EntityPlayer;
 import net.minecraft.core.util.helper.MathHelper;
 import net.minecraft.core.world.World;
 import net.minecraft.core.world.season.Season;
 import net.minecraft.core.world.season.Seasons;
-import net.minecraft.core.world.type.WorldTypes;
 
 public class ShaderRenderer extends Renderer implements CustomRenderer {
 	
@@ -67,6 +68,7 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	
 	private long startTime = System.currentTimeMillis();
 	private float frameTimeCounter = 0;
+	private int isEyeInLiquid;
 
 	private Matrix4f shadowProjectionMatrix = new Matrix4f();
 	private Matrix4f shadowModelViewMatrix = new Matrix4f();
@@ -131,6 +133,16 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 					if(enableShadowmap) {
 						shadowFramebuffer.create(0, null);	
 					}
+					if(shadow.has("resolution")) {
+						shadowMapResolution = shadow.getInt("resolution");
+					}else {
+						shadowMapResolution = 1024;
+					}
+					if(shadow.has("distance")) {
+						shadowDistance = shadow.getFloat("distance");
+					}else {
+						shadowDistance = 64.0f;
+					}
 				}
 			}
 			
@@ -164,13 +176,21 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 				JsonObject obj = entry.value.getAsObject();
 				
 				if(i > 0) {
-					renderPass.in = parseIntArray(obj.getArray("in"));
+					JsonArray array = obj.getArray("in");
+					if(array == null) {
+						throw new RuntimeException("Missing \"in\" array in renderpass \"" + entry.name + "\"!");
+					}
+					renderPass.in = parseIntArray(array);
 				}else {
 					renderPass.in = new int[] {0};
 				}
 				
 				if(i < entries.size() - 1) {
-					renderPass.out = parseIntArray(obj.getArray("out"));
+					JsonArray array = obj.getArray("out");
+					if(array == null) {
+						throw new RuntimeException("Missing \"out\" array in renderpass \"" + entry.name + "\"!");
+					}
+					renderPass.out = parseIntArray(array);
 				}else {
 					renderPass.out = new int[] {0};
 				}
@@ -298,6 +318,17 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		long now = System.currentTimeMillis();
 		int passedTime = (int) (now - startTime);
 		frameTimeCounter = passedTime / 1000.0f;
+		if(mc.thePlayer != null && mc.theWorld != null && mc.activeCamera != null) {
+			if(CameraUtil.isUnderLiquid(mc.activeCamera, mc.theWorld, Material.lava, partialTicks)) {
+				isEyeInLiquid = 2;
+			}else if(CameraUtil.isUnderLiquid(mc.activeCamera, mc.theWorld, Material.water, partialTicks)) {
+				isEyeInLiquid = 1;
+			}else {
+				isEyeInLiquid = 0;
+			}
+		}else {
+			isEyeInLiquid = 0;
+		}
 		
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		
@@ -326,16 +357,16 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 			double renderPosY = mc.activeCamera.getY(partialTicks);
 			double renderPosZ = mc.activeCamera.getZ(partialTicks);
 			
-			glRotatef(90.0f, 0.0f, 1.0f, 0.0f);
+			glRotatef(-90.0f, 0.0f, 1.0f, 0.0f);
 			float sunAngle = mc.theWorld.getCelestialAngle(partialTicks);
-			
+
 			if(sunAngle > 0.25f && sunAngle < 0.75f) {
 				sunAngle += 0.5f;
 			}
 			
-			glRotatef(sunAngle * 360.0f + 90.0f, 0.0f, 0.0f, 1.0f);
+			glRotatef(-sunAngle * 360.0f - 90.0f, 0.0f, 0.0f, 1.0f);
 
-			glTranslated(renderPosX % 8.0, renderPosY % 8.0, renderPosZ % 8.0);
+			glTranslated(renderPosX % 4.0, renderPosY % 4.0, renderPosZ % 4.0);
 			
 			MatrixHelper.getMatrix(GL_PROJECTION_MATRIX, shadowProjectionMatrix);
 			MatrixHelper.getMatrix(GL_MODELVIEW_MATRIX, shadowModelViewMatrix);
@@ -368,7 +399,7 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 			return;
 		}
 		
-		if(enableShadowmap && mc.theWorld != null && mc.thePlayer != null) {
+		if(enableShadowmap && mc.theWorld != null && mc.thePlayer != null && !mc.theWorld.worldType.hasCeiling()) {
 			Integer prevImmersiveMode = mc.gameSettings.immersiveMode.value;
 			Boolean prevClouds = mc.gameSettings.clouds.value;
 			
@@ -537,8 +568,8 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		glPushMatrix();
 		glScaled(0.24, 0.24, 1.0);
 		glTranslated(0.1, 0.1, 0.0);
-		if(pos == 1) {
-			glTranslated(0.0, 1.1, 0.0);	
+		if(pos > 0) {
+			glTranslated(0.0, pos * 1.1, 0.0);	
 		}
 		
 		for(int i=0; i < framebuffer.colortex.length + 1; i++) {
@@ -598,9 +629,6 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		
 		float sunAngle = 0.0f;
 		
-		boolean nether = false;
-		boolean paradise = false;
-		
 		if(mc.theWorld != null && mc.thePlayer != null) {
 			World world = mc.theWorld;
 			EntityPlayer player = mc.thePlayer;
@@ -618,9 +646,6 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 			biomeTemperature = (float) world.getBlockTemperature(playerX, playerZ);
 			
 			sunAngle = world.getCelestialAngle(1.0f);
-			
-			nether = world.worldType == WorldTypes.NETHER_DEFAULT;
-			paradise = world.worldType == WorldTypes.PARADISE_DEFAULT;
 		}
 		
 		glUniform1f(shader.getUniform("spring"), spring ? 1.0f : 0.0f);
@@ -631,8 +656,8 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		glUniform1f(shader.getUniform("biomeTemperature"), biomeTemperature);
 		glUniform1f(shader.getUniform("sunAngle"), sunAngle);
 
-		glUniform1f(shader.getUniform("nether"), nether ? 1.0f : 0.0f);
-		glUniform1f(shader.getUniform("paradise"), paradise ? 1.0f : 0.0f);
+		glUniform1i(shader.getUniform("dimension"), mc.theWorld != null && mc.theWorld.dimension != null ? mc.theWorld.dimension.id : 0);
+		glUniform1i(shader.getUniform("dimensionShadow"), mc.theWorld != null && mc.theWorld.worldType != null && mc.theWorld.worldType.hasCeiling() ? 0 : 1);
 		
 		glUniform1f(shader.getUniform("frameTimeCounter"), frameTimeCounter);
 
@@ -641,6 +666,7 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		glUniform1f(shader.getUniform("fxaa"), mc.gameSettings.fxaa.value);
 		glUniform1i(shader.getUniform("bloom"), mc.gameSettings.bloom.value);
 		glUniform1i(shader.getUniform("heatHaze"), mc.gameSettings.heatHaze.value ? 1 : 0);
+		glUniform1i(shader.getUniform("cbCorrectionMode"), mc.gameSettings.colorblindnessFix.value.ordinal());
 		
 		PostProcessingManager ppm = mc.ppm;
 		glUniform1f(shader.getUniform("brightness"), ppm.brightness);
@@ -650,6 +676,9 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		glUniform1f(shader.getUniform("rMod"), ppm.rMod);
 		glUniform1f(shader.getUniform("gMod"), ppm.gMod);
 		glUniform1f(shader.getUniform("bMod"), ppm.bMod);
+
+		glUniform1i(shader.getUniform("isEyeInLiquid"), isEyeInLiquid);
+		glUniform1i(shader.getUniform("isGuiOpened"), mc.currentScreen != null ? 1 : 0);
 		
 		checkError("uniforms");
 	}

@@ -53,6 +53,42 @@ public class Transformers {
 			
 			InsnList insert = injectHelper.createMethodCallInject(classNode, setupCameraTransform, "beforeSetupCameraTransform");
 			setupCameraTransform.instructions.insertBefore(setupCameraTransform.instructions.getFirst(), insert);
+			
+			MethodNode renderRainSnow = ASMHelper.findMethod(classNode, "renderRainSnow");
+			insert = injectHelper.createMethodCallInject(classNode, renderRainSnow, "renderRainSnowCancel");
+			renderRainSnow.instructions.insertBefore(renderRainSnow.instructions.getFirst(), insert);
+		}
+		
+	}
+	
+	class EntityCameraTransformer extends ClassTransformer {
+
+		@Override
+		public boolean accepts(String className) {
+			return className.equals("net/minecraft/client/render/camera/EntityCamera");
+		}
+
+		@Override
+		public void transform(String className, ClassNode classNode) {
+			MethodNode showPlayer = ASMHelper.findMethod(classNode, "showPlayer");
+			InsnList insert = injectHelper.createMethodCallInject(classNode, showPlayer, "showPlayerOverride");
+			showPlayer.instructions.insertBefore(showPlayer.instructions.getFirst(), insert);
+		}
+		
+	}
+	
+	class RenderGlobalTransformer extends ClassTransformer {
+
+		@Override
+		public boolean accepts(String className) {
+			return className.equals("net/minecraft/client/render/RenderGlobal");
+		}
+
+		@Override
+		public void transform(String className, ClassNode classNode) {
+			MethodNode updateRenderers = ASMHelper.findMethod(classNode, "updateRenderers");
+			InsnList insert = injectHelper.createMethodCallInject(classNode, updateRenderers, "updateRenderersCancel");
+			updateRenderers.instructions.insertBefore(updateRenderers.instructions.getFirst(), insert);
 		}
 		
 	}
