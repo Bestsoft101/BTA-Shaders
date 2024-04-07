@@ -32,6 +32,7 @@ import net.minecraft.core.util.helper.MathHelper;
 import net.minecraft.core.world.World;
 import net.minecraft.core.world.season.Season;
 import net.minecraft.core.world.season.Seasons;
+import net.minecraft.core.world.weather.Weather;
 
 public class ShaderRenderer extends Renderer implements CustomRenderer {
 	
@@ -47,6 +48,7 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	private final Framebuffer baseFramebuffer = new Framebuffer();
 	private final Framebuffer postFramebuffer = new Framebuffer();
 	
+	private final Shader shadowShader = new Shader();
 	private boolean enableShadowmap = false;
 	public boolean isRenderingShadowmap;
 	public int shadowMapResolution = 1024;
@@ -66,9 +68,16 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	private boolean pressedToggleLast = false;
 	private boolean pressedShowTexturesLast = false;
 	
+	// Uniforms
 	private long startTime = System.currentTimeMillis();
 	private float frameTimeCounter = 0;
 	private int isEyeInLiquid;
+	private float biomeTemperature;
+	private float biomeHumidity;
+	private float sunAngle;
+	private int weather;
+	private float weatherIntensity;
+	private float weatherPower;
 
 	private Matrix4f shadowProjectionMatrix = new Matrix4f();
 	private Matrix4f shadowModelViewMatrix = new Matrix4f();
@@ -142,6 +151,9 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 						shadowDistance = shadow.getFloat("distance");
 					}else {
 						shadowDistance = 64.0f;
+					}
+					if(shadow.has("shader")) {
+						shadowShader.setupShader(shadow.getString("shader"));
 					}
 				}
 			}
@@ -282,6 +294,7 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 			setupFramebuffers();
 		}
 		
+		// Handle input
 		boolean pressedReload = Keyboard.isKeyDown(Keyboard.KEY_F7);
 		if(pressedReload != pressedReloadLast) {
 			pressedReloadLast = pressedReload;
@@ -315,21 +328,53 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 			return;
 		}
 		
+		// Update uniforms
 		long now = System.currentTimeMillis();
 		int passedTime = (int) (now - startTime);
 		frameTimeCounter = passedTime / 1000.0f;
-		if(mc.thePlayer != null && mc.theWorld != null && mc.activeCamera != null) {
-			if(CameraUtil.isUnderLiquid(mc.activeCamera, mc.theWorld, Material.lava, partialTicks)) {
-				isEyeInLiquid = 2;
-			}else if(CameraUtil.isUnderLiquid(mc.activeCamera, mc.theWorld, Material.water, partialTicks)) {
-				isEyeInLiquid = 1;
+		
+		if(mc.thePlayer != null && mc.theWorld != null) {
+			EntityPlayer player = mc.thePlayer;
+			World world = mc.theWorld;
+			
+			if(mc.activeCamera != null) {
+				if(CameraUtil.isUnderLiquid(mc.activeCamera, mc.theWorld, Material.lava, partialTicks)) {
+					isEyeInLiquid = 2;
+				}else if(CameraUtil.isUnderLiquid(mc.activeCamera, mc.theWorld, Material.water, partialTicks)) {
+					isEyeInLiquid = 1;
+				}else {
+					isEyeInLiquid = 0;
+				}
 			}else {
 				isEyeInLiquid = 0;
 			}
+			
+			int playerX = MathHelper.floor_double(player.x);
+			int playerZ = MathHelper.floor_double(player.z);
+			
+			biomeTemperature = (float) world.getBlockTemperature(playerX, playerZ);
+			biomeHumidity = (float) world.getBlockHumidity(playerX, playerZ);
+			sunAngle = world.getCelestialAngle(partialTicks);
+			
+			Weather currentWeather = world.weatherManager.getCurrentWeather();
+			if(currentWeather != null) {
+				weather = currentWeather.weatherId;	
+			}else {
+				weather = 0;
+			}
+			weatherIntensity = world.weatherManager.getWeatherIntensity();
+			weatherPower = world.weatherManager.getWeatherPower();
 		}else {
+			biomeTemperature = 0.7f;
+			biomeHumidity = 0.5f;
 			isEyeInLiquid = 0;
+			
+			weather = 0;
+			weatherIntensity = 0.0f;
+			weatherPower = 0.0f;
 		}
 		
+		// Setup framebuffer for rendering
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		
 		if(baseRenderPasses.size() > 0) {
@@ -347,6 +392,7 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	@Override
 	public boolean beforeSetupCameraTransform(float partialTicks) {
 		if(enableShadowmap && isRenderingShadowmap) {
+			// Setup shadowmap camera
 			glMatrixMode(GL_PROJECTION);
 			glLoadIdentity();
 			glOrtho(-shadowDistance, shadowDistance, -shadowDistance, shadowDistance, -shadowDistance, shadowDistance);
@@ -379,6 +425,7 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	@Override
 	public void afterSetupCameraTransform(float partialTicks) {
 		if(!isRenderingShadowmap) {
+			// Get matrices for uniforms
 			MatrixHelper.getMatrix(GL_PROJECTION_MATRIX, projectionMatrix);
 			MatrixHelper.getMatrix(GL_MODELVIEW_MATRIX, modelViewMatrix);
 			
@@ -400,6 +447,7 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		}
 		
 		if(enableShadowmap && mc.theWorld != null && mc.thePlayer != null && !mc.theWorld.worldType.hasCeiling()) {
+			// Render shadowmap
 			Integer prevImmersiveMode = mc.gameSettings.immersiveMode.value;
 			Boolean prevClouds = mc.gameSettings.clouds.value;
 			
@@ -412,7 +460,11 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 				
 				glBindFramebuffer(GL_FRAMEBUFFER, shadowFramebuffer.id);
 				
+				shadowShader.bind();
+				
 				mc.worldRenderer.renderWorld(partialTicks, 0L);
+				
+				glUseProgram(0);
 				
 				glBindFramebuffer(GL_FRAMEBUFFER, 0);
 				isRenderingShadowmap = false;
@@ -625,13 +677,11 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		boolean autumn = false;
 		boolean winter = false;
 		
-		float biomeTemperature = 0.7f;
-		
-		float sunAngle = 0.0f;
+		int dimension;
+		int dimensionShadow;
 		
 		if(mc.theWorld != null && mc.thePlayer != null) {
 			World world = mc.theWorld;
-			EntityPlayer player = mc.thePlayer;
 			
 			Season currentSeason = world.seasonManager.getCurrentSeason(); 
 			
@@ -640,24 +690,28 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 			autumn = currentSeason == Seasons.OVERWORLD_FALL;
 			winter = currentSeason == Seasons.OVERWORLD_WINTER || currentSeason == Seasons.OVERWORLD_WINTER_ENDLESS;
 			
-			int playerX = MathHelper.floor_double(player.x);
-			int playerZ = MathHelper.floor_double(player.z);
-			
-			biomeTemperature = (float) world.getBlockTemperature(playerX, playerZ);
-			
-			sunAngle = world.getCelestialAngle(1.0f);
+			dimension = world.dimension.id;
+			dimensionShadow = world.worldType.hasCeiling() ? 0 : 1;
+		}else {
+			dimension = 0;
+			dimensionShadow = 0;
 		}
 		
 		glUniform1f(shader.getUniform("spring"), spring ? 1.0f : 0.0f);
 		glUniform1f(shader.getUniform("summer"), summer ? 1.0f : 0.0f);
 		glUniform1f(shader.getUniform("autumn"), autumn ? 1.0f : 0.0f);
 		glUniform1f(shader.getUniform("winter"), winter ? 1.0f : 0.0f);
-		
+
 		glUniform1f(shader.getUniform("biomeTemperature"), biomeTemperature);
+		glUniform1f(shader.getUniform("biomeHumidity"), biomeHumidity);
 		glUniform1f(shader.getUniform("sunAngle"), sunAngle);
 
-		glUniform1i(shader.getUniform("dimension"), mc.theWorld != null && mc.theWorld.dimension != null ? mc.theWorld.dimension.id : 0);
-		glUniform1i(shader.getUniform("dimensionShadow"), mc.theWorld != null && mc.theWorld.worldType != null && mc.theWorld.worldType.hasCeiling() ? 0 : 1);
+		glUniform1i(shader.getUniform("weather"), weather);
+		glUniform1f(shader.getUniform("weatherIntensity"), weatherIntensity);
+		glUniform1f(shader.getUniform("weatherPower"), weatherPower);
+		
+		glUniform1i(shader.getUniform("dimension"), dimension);
+		glUniform1i(shader.getUniform("dimensionShadow"), dimensionShadow);
 		
 		glUniform1f(shader.getUniform("frameTimeCounter"), frameTimeCounter);
 
@@ -679,6 +733,7 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 
 		glUniform1i(shader.getUniform("isEyeInLiquid"), isEyeInLiquid);
 		glUniform1i(shader.getUniform("isGuiOpened"), mc.currentScreen != null ? 1 : 0);
+		glUniform1i(shader.getUniform("isWorldOpened"), mc.thePlayer != null && mc.theWorld != null ? 1 : 0);
 		
 		checkError("uniforms");
 	}
@@ -744,15 +799,19 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	
 	@Override
 	public void delete() {
+		shadowFramebuffer.delete();
+		shadowShader.delete();
+		
 		baseFramebuffer.delete();
 		postFramebuffer.delete();
-		shadowFramebuffer.delete();
+		
 		for(int i=0; i < baseRenderPasses.size(); i++) {
 			baseRenderPasses.get(i).shader.delete();
 		}
 		for(int i=0; i < postRenderPasses.size(); i++) {
 			postRenderPasses.get(i).shader.delete();
 		}
+		
 		baseRenderPasses.clear();
 		postRenderPasses.clear();
 		
