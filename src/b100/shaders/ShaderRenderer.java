@@ -8,11 +8,14 @@ import static org.lwjgl.opengl.GL20.*;
 import static org.lwjgl.opengl.GL30.*;
 
 import java.io.File;
+import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.opengl.Display;
@@ -23,16 +26,7 @@ import b100.json.element.JsonArray;
 import b100.json.element.JsonEntry;
 import b100.json.element.JsonObject;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.render.PostProcessingManager;
 import net.minecraft.client.render.Renderer;
-import net.minecraft.client.render.camera.CameraUtil;
-import net.minecraft.core.block.material.Material;
-import net.minecraft.core.entity.player.EntityPlayer;
-import net.minecraft.core.util.helper.MathHelper;
-import net.minecraft.core.world.World;
-import net.minecraft.core.world.season.Season;
-import net.minecraft.core.world.season.Seasons;
-import net.minecraft.core.world.weather.Weather;
 
 public class ShaderRenderer extends Renderer implements CustomRenderer {
 	
@@ -49,17 +43,23 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	private final Framebuffer postFramebuffer = new Framebuffer();
 	
 	private final Shader shadowShader = new Shader();
-	private boolean enableShadowmap = false;
+	public boolean enableShadowmap = false;
 	public boolean isRenderingShadowmap;
 	public int shadowMapResolution = 1024;
 	public float shadowDistance = 64.0f;
+
+	private final Shader basicShader = new Shader();
+	private final Shader texturedShader = new Shader();
+	private final Shader skyBasicShader = new Shader();
+	private final Shader skyTexturedShader = new Shader();
 	
 	private int fullscreenRectList = 0;
 	
 	private int framebufferWidth = -1;
 	private int framebufferHeight = -1;
-	
+
 	private IntBuffer intBuffer = ByteBuffer.allocateDirect(64).order(ByteOrder.nativeOrder()).asIntBuffer();
+	private FloatBuffer floatBuffer = ByteBuffer.allocateDirect(64).order(ByteOrder.nativeOrder()).asFloatBuffer();
 
 	private boolean enableShaders = true;
 	private boolean showTextures = false;
@@ -68,25 +68,11 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	private boolean pressedToggleLast = false;
 	private boolean pressedShowTexturesLast = false;
 	
-	// Uniforms
-	private long startTime = System.currentTimeMillis();
-	private float frameTimeCounter = 0;
-	private int isEyeInLiquid;
-	private float biomeTemperature;
-	private float biomeHumidity;
-	private float sunAngle;
-	private int weather;
-	private float weatherIntensity;
-	private float weatherPower;
-
-	private Matrix4f shadowProjectionMatrix = new Matrix4f();
-	private Matrix4f shadowModelViewMatrix = new Matrix4f();
-
-	private Matrix4f projectionMatrix = new Matrix4f();
-	private Matrix4f modelViewMatrix = new Matrix4f();
-
-	private Matrix4f projectionInverseMatrix = new Matrix4f();
-	private Matrix4f modelViewInverseMatrix = new Matrix4f();
+	public final Uniforms uniforms = new Uniforms(this);
+	
+	public int fogMode;
+	
+	private Shader currentShader;
 	
 	public ShaderRenderer(Minecraft mc) {
 		super(mc);
@@ -98,6 +84,8 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		isSetup = true;
 		
 		checkError("pre setup");
+		
+		resetGlErrors();
 
 		delete();
 		
@@ -125,17 +113,7 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 				return;
 			}else {
 				ShaderMod.log("Loading shader.json");
-				
-				JsonObject base = root.getObject("base");
-				JsonObject post = root.getObject("post");
-				
-				if(base != null) {
-					parseRenderConfig(base, baseRenderPasses, baseFramebuffer);
-				}
-				if(post != null) {
-					parseRenderConfig(post, postRenderPasses, postFramebuffer);
-				}
-				
+
 				JsonObject shadow = root.getObject("shadow");
 				if(shadow != null) {
 					enableShadowmap = shadow.getBoolean("enable");
@@ -156,6 +134,33 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 						shadowShader.setupShader(shadow.getString("shader"));
 					}
 				}
+				
+				JsonObject world = root.getObject("world");
+				if(world != null) {
+					if(world.has("basic")) {
+						basicShader.setupShader(world.getString("basic"));
+					}
+					if(world.has("textured")) {
+						texturedShader.setupShader(world.getString("textured"));
+					}
+					if(world.has("skybasic")) {
+						skyBasicShader.setupShader(world.getString("skybasic"));
+					}
+					if(world.has("skytextured")) {
+						skyTexturedShader.setupShader(world.getString("skytextured"));
+					}
+				}
+				
+				JsonObject base = root.getObject("base");
+				JsonObject post = root.getObject("post");
+				
+				if(base != null) {
+					parseRenderConfig(base, baseRenderPasses, baseFramebuffer);
+				}
+				if(post != null) {
+					parseRenderConfig(post, postRenderPasses, postFramebuffer);
+				}
+				
 			}
 			
 			ShaderMod.log("Render Passes: " + baseRenderPasses.size() + " Base, " + postRenderPasses.size() + " Post");
@@ -187,7 +192,7 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 				
 				JsonObject obj = entry.value.getAsObject();
 				
-				if(i > 0) {
+				if(i > 0 || framebuffer == postFramebuffer) {
 					JsonArray array = obj.getArray("in");
 					if(array == null) {
 						throw new RuntimeException("Missing \"in\" array in renderpass \"" + entry.name + "\"!");
@@ -329,50 +334,7 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		}
 		
 		// Update uniforms
-		long now = System.currentTimeMillis();
-		int passedTime = (int) (now - startTime);
-		frameTimeCounter = passedTime / 1000.0f;
-		
-		if(mc.thePlayer != null && mc.theWorld != null) {
-			EntityPlayer player = mc.thePlayer;
-			World world = mc.theWorld;
-			
-			if(mc.activeCamera != null) {
-				if(CameraUtil.isUnderLiquid(mc.activeCamera, mc.theWorld, Material.lava, partialTicks)) {
-					isEyeInLiquid = 2;
-				}else if(CameraUtil.isUnderLiquid(mc.activeCamera, mc.theWorld, Material.water, partialTicks)) {
-					isEyeInLiquid = 1;
-				}else {
-					isEyeInLiquid = 0;
-				}
-			}else {
-				isEyeInLiquid = 0;
-			}
-			
-			int playerX = MathHelper.floor_double(player.x);
-			int playerZ = MathHelper.floor_double(player.z);
-			
-			biomeTemperature = (float) world.getBlockTemperature(playerX, playerZ);
-			biomeHumidity = (float) world.getBlockHumidity(playerX, playerZ);
-			sunAngle = world.getCelestialAngle(partialTicks);
-			
-			Weather currentWeather = world.weatherManager.getCurrentWeather();
-			if(currentWeather != null) {
-				weather = currentWeather.weatherId;	
-			}else {
-				weather = 0;
-			}
-			weatherIntensity = world.weatherManager.getWeatherIntensity();
-			weatherPower = world.weatherManager.getWeatherPower();
-		}else {
-			biomeTemperature = 0.7f;
-			biomeHumidity = 0.5f;
-			isEyeInLiquid = 0;
-			
-			weather = 0;
-			weatherIntensity = 0.0f;
-			weatherPower = 0.0f;
-		}
+		uniforms.update(partialTicks);
 		
 		// Setup framebuffer for rendering
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -391,6 +353,10 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 
 	@Override
 	public boolean beforeSetupCameraTransform(float partialTicks) {
+		if(!enableShaders) {
+			return false;
+		}
+		
 		if(enableShadowmap && isRenderingShadowmap) {
 			// Setup shadowmap camera
 			glMatrixMode(GL_PROJECTION);
@@ -414,8 +380,8 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 
 			glTranslated(renderPosX % 4.0, renderPosY % 4.0, renderPosZ % 4.0);
 			
-			MatrixHelper.getMatrix(GL_PROJECTION_MATRIX, shadowProjectionMatrix);
-			MatrixHelper.getMatrix(GL_MODELVIEW_MATRIX, shadowModelViewMatrix);
+			MatrixHelper.getMatrix(GL_PROJECTION_MATRIX, uniforms.shadowProjectionMatrix);
+			MatrixHelper.getMatrix(GL_MODELVIEW_MATRIX, uniforms.shadowModelViewMatrix);
 			
 			return true;
 		}
@@ -424,27 +390,30 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 
 	@Override
 	public void afterSetupCameraTransform(float partialTicks) {
+		if(!enableShaders) {
+			return;
+		}
+		
 		if(!isRenderingShadowmap) {
 			// Get matrices for uniforms
-			MatrixHelper.getMatrix(GL_PROJECTION_MATRIX, projectionMatrix);
-			MatrixHelper.getMatrix(GL_MODELVIEW_MATRIX, modelViewMatrix);
+			uniforms.previousProjectionMatrix.load(uniforms.projectionMatrix);
+			uniforms.previousModelViewMatrix.load(uniforms.modelViewMatrix);
 			
-			Matrix4f.invert(projectionMatrix, projectionInverseMatrix);
-			Matrix4f.invert(modelViewMatrix, modelViewInverseMatrix);
+			MatrixHelper.getMatrix(GL_PROJECTION_MATRIX, uniforms.projectionMatrix);
+			MatrixHelper.getMatrix(GL_MODELVIEW_MATRIX, uniforms.modelViewMatrix);
+			
+			Matrix4f.invert(uniforms.projectionMatrix, uniforms.projectionInverseMatrix);
+			Matrix4f.invert(uniforms.modelViewMatrix, uniforms.modelViewInverseMatrix);
 		}
 	}
 	
 	@Override
 	public void beginRenderWorld(float partialTicks) {
-		if(isRenderingShadowmap) {
+		if(!enableShaders || isRenderingShadowmap) {
 			return;
 		}
 		
 		checkError("pre begin render world");
-
-		if(!enableShaders) {
-			return;
-		}
 		
 		if(enableShadowmap && mc.theWorld != null && mc.thePlayer != null && !mc.theWorld.worldType.hasCeiling()) {
 			// Render shadowmap
@@ -478,12 +447,86 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		
 		if(postRenderPasses.size() > 0) {
 			glBindFramebuffer(GL_FRAMEBUFFER, postFramebuffer.id);
-			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, postFramebuffer.colortex[0], 0);
-			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, 0, 0);
-			glDrawBuffers(GL_COLOR_ATTACHMENT0);
+			
+			RenderPass renderPass = postRenderPasses.get(0);
+			
+			intBuffer.clear();
+			
+			for(int inIndex=0; inIndex < renderPass.in.length; inIndex++) {
+				glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + inIndex, GL_TEXTURE_2D, postFramebuffer.colortex[renderPass.in[inIndex]], 0);
+				intBuffer.put(GL_COLOR_ATTACHMENT0 + inIndex);
+			}
+			
+			intBuffer.flip();
+			
+			glDrawBuffers(intBuffer);
 		}
+
+		currentShader = null;
+		
+		bindWorldShader(basicShader);
 		
 		checkError("begin render world");
+	}
+	
+	public void bindWorldShader(Shader shader) {
+		if(shader == currentShader) {
+			return;
+		}
+		currentShader = shader;
+		
+		if(currentShader.bind()) {
+			glUniform1i(shader.getUniform("fogMode"), fogMode);
+			
+			setupCommonUniforms(shader, 0);
+		}
+	}
+
+	@Override
+	public void onClearWorldBuffer() {
+		if(isRenderingShadowmap || !enableShaders) {
+			return;
+		}
+		
+		if(postRenderPasses.size() > 1) {
+			// TODO make color configurable
+			floatBuffer.clear();
+			floatBuffer.put(0.0f);
+			floatBuffer.put(0.0f);
+			floatBuffer.put(0.0f);
+			floatBuffer.put(0.0f);
+			floatBuffer.flip();
+			for(int i = 1; i < postRenderPasses.size(); i++) {
+				glClearBuffer(GL_COLOR, i, floatBuffer);	
+			}
+		}
+	}
+	
+	@Override
+	public void beginRenderSkyBasic() {
+		if(isRenderingShadowmap || !enableShaders) {
+			return;
+		}
+		
+		bindWorldShader(skyBasicShader);
+	}
+	
+	@Override
+	public void beginRenderSkyTextured() {
+		if(isRenderingShadowmap || !enableShaders) {
+			return;
+		}
+
+		bindWorldShader(skyTexturedShader);
+	}
+
+	@Override
+	public void beginRenderTerrain() {
+		if(isRenderingShadowmap || !enableShaders) {
+			return;
+		}
+
+		bindWorldShader(texturedShader);
 	}
 	
 	@Override
@@ -493,6 +536,8 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		}
 		
 		checkError("pre end render world");
+		
+		glUseProgram(0);
 
 		if(!enableShaders) {
 			return;
@@ -618,7 +663,7 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	public void showTextures(Framebuffer framebuffer, int pos) {
 		// Debug
 		glPushMatrix();
-		glScaled(0.24, 0.24, 1.0);
+		glScaled(0.18, 0.18, 1.0);
 		glTranslated(0.1, 0.1, 0.0);
 		if(pos > 0) {
 			glTranslated(0.0, pos * 1.1, 0.0);	
@@ -662,78 +707,7 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	private void setupCommonUniforms(Shader shader, int stage) {
 		checkError("pre uniforms");
 		
-		glUniform1f(shader.getUniform("viewWidth"), Display.getWidth());
-		glUniform1f(shader.getUniform("viewHeight"), Display.getHeight());
-
-		if(stage == 0 && enableShadowmap) {
-			MatrixHelper.uniformMatrix(shader.getUniform("shadowProjection"), shadowProjectionMatrix);
-			MatrixHelper.uniformMatrix(shader.getUniform("shadowModelView"), shadowModelViewMatrix);
-			MatrixHelper.uniformMatrix(shader.getUniform("gbufferProjectionInverse"), projectionInverseMatrix);
-			MatrixHelper.uniformMatrix(shader.getUniform("gbufferModelViewInverse"), modelViewInverseMatrix);
-		}
-		
-		boolean spring = false;
-		boolean summer = false;
-		boolean autumn = false;
-		boolean winter = false;
-		
-		int dimension;
-		int dimensionShadow;
-		
-		if(mc.theWorld != null && mc.thePlayer != null) {
-			World world = mc.theWorld;
-			
-			Season currentSeason = world.seasonManager.getCurrentSeason(); 
-			
-			spring = currentSeason == Seasons.OVERWORLD_SPRING;
-			summer = currentSeason == Seasons.OVERWORLD_SUMMER;
-			autumn = currentSeason == Seasons.OVERWORLD_FALL;
-			winter = currentSeason == Seasons.OVERWORLD_WINTER || currentSeason == Seasons.OVERWORLD_WINTER_ENDLESS;
-			
-			dimension = world.dimension.id;
-			dimensionShadow = world.worldType.hasCeiling() ? 0 : 1;
-		}else {
-			dimension = 0;
-			dimensionShadow = 0;
-		}
-		
-		glUniform1f(shader.getUniform("spring"), spring ? 1.0f : 0.0f);
-		glUniform1f(shader.getUniform("summer"), summer ? 1.0f : 0.0f);
-		glUniform1f(shader.getUniform("autumn"), autumn ? 1.0f : 0.0f);
-		glUniform1f(shader.getUniform("winter"), winter ? 1.0f : 0.0f);
-
-		glUniform1f(shader.getUniform("biomeTemperature"), biomeTemperature);
-		glUniform1f(shader.getUniform("biomeHumidity"), biomeHumidity);
-		glUniform1f(shader.getUniform("sunAngle"), sunAngle);
-
-		glUniform1i(shader.getUniform("weather"), weather);
-		glUniform1f(shader.getUniform("weatherIntensity"), weatherIntensity);
-		glUniform1f(shader.getUniform("weatherPower"), weatherPower);
-		
-		glUniform1i(shader.getUniform("dimension"), dimension);
-		glUniform1i(shader.getUniform("dimensionShadow"), dimensionShadow);
-		
-		glUniform1f(shader.getUniform("frameTimeCounter"), frameTimeCounter);
-
-		glUniform1f(shader.getUniform("gamma"), mc.gameSettings.gamma.value);
-		glUniform1f(shader.getUniform("colorCorrection"), mc.gameSettings.colorCorrection.value);
-		glUniform1f(shader.getUniform("fxaa"), mc.gameSettings.fxaa.value);
-		glUniform1i(shader.getUniform("bloom"), mc.gameSettings.bloom.value);
-		glUniform1i(shader.getUniform("heatHaze"), mc.gameSettings.heatHaze.value ? 1 : 0);
-		glUniform1i(shader.getUniform("cbCorrectionMode"), mc.gameSettings.colorblindnessFix.value.ordinal());
-		
-		PostProcessingManager ppm = mc.ppm;
-		glUniform1f(shader.getUniform("brightness"), ppm.brightness);
-		glUniform1f(shader.getUniform("contrast"), ppm.contrast);
-		glUniform1f(shader.getUniform("exposure"), ppm.exposure);
-		glUniform1f(shader.getUniform("saturation"), ppm.saturation);
-		glUniform1f(shader.getUniform("rMod"), ppm.rMod);
-		glUniform1f(shader.getUniform("gMod"), ppm.gMod);
-		glUniform1f(shader.getUniform("bMod"), ppm.bMod);
-
-		glUniform1i(shader.getUniform("isEyeInLiquid"), isEyeInLiquid);
-		glUniform1i(shader.getUniform("isGuiOpened"), mc.currentScreen != null ? 1 : 0);
-		glUniform1i(shader.getUniform("isWorldOpened"), mc.thePlayer != null && mc.theWorld != null ? 1 : 0);
+		uniforms.apply(shader, stage);
 		
 		checkError("uniforms");
 	}
@@ -814,6 +788,11 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		
 		baseRenderPasses.clear();
 		postRenderPasses.clear();
+
+		basicShader.delete();
+		texturedShader.delete();
+		skyBasicShader.delete();
+		skyTexturedShader.delete();
 		
 		enableShadowmap = false;
 	}
@@ -916,6 +895,17 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		}
 		
 		return intArray;
+	}
+	
+	public static void resetGlErrors() {
+		try {
+			Field errorStatesField = OpenGLHelper.class.getDeclaredField("errorStates");
+			errorStatesField.setAccessible(true);
+			Set<?> errorStates = (Set<?>) errorStatesField.get(null);
+			errorStates.clear();
+		}catch (Exception e) {
+			throw new RuntimeException(e);
+		}
 	}
 
 }
