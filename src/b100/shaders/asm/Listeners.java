@@ -11,6 +11,8 @@ import net.minecraft.client.render.Renderer;
 import net.minecraft.client.render.WorldRenderer;
 import net.minecraft.client.render.camera.EntityCamera;
 import net.minecraft.client.render.camera.ICamera;
+import net.minecraft.client.render.entity.EntityRenderer;
+import net.minecraft.core.entity.Entity;
 
 public class Listeners {
 	
@@ -84,6 +86,20 @@ public class Listeners {
 		}
 	}
 	
+	public static void beginRenderBasic() {
+		if(mc.render instanceof CustomRenderer) {
+			CustomRenderer customRenderer = (CustomRenderer) mc.render;
+			customRenderer.beginRenderBasic();
+		}
+	}
+	
+	public static void beginRenderTextured() {
+		if(mc.render instanceof CustomRenderer) {
+			CustomRenderer customRenderer = (CustomRenderer) mc.render;
+			customRenderer.beginRenderTextured();
+		}
+	}
+	
 	public static void beginRenderTerrain() {
 		if(mc.render instanceof CustomRenderer) {
 			CustomRenderer customRenderer = (CustomRenderer) mc.render;
@@ -105,6 +121,34 @@ public class Listeners {
 		}
 	}
 	
+	public static void beginRenderTranslucent() {
+		if(mc.render instanceof CustomRenderer) {
+			CustomRenderer customRenderer = (CustomRenderer) mc.render;
+			customRenderer.beginRenderTranslucent();
+		}
+	}
+	
+	public static void beginRenderClouds() {
+		if(mc.render instanceof CustomRenderer) {
+			CustomRenderer customRenderer = (CustomRenderer) mc.render;
+			customRenderer.beginRenderClouds();
+		}
+	}
+	
+	public static void beginRenderEntities() {
+		if(mc.render instanceof CustomRenderer) {
+			CustomRenderer customRenderer = (CustomRenderer) mc.render;
+			customRenderer.beginRenderEntities();
+		}
+	}
+	
+	public static void beginRenderHand() {
+		if(mc.render instanceof CustomRenderer) {
+			CustomRenderer customRenderer = (CustomRenderer) mc.render;
+			customRenderer.beginRenderHand();
+		}
+	}
+	
 	public static void setFogMode(int pname, int param) {
 		glFogi(pname, param);
 		if(pname == GL_FOG_MODE) {
@@ -113,6 +157,15 @@ public class Listeners {
 				shadersRenderer.fogMode = param;
 			}
 		}
+	}
+	public static boolean beforeRenderShadow(EntityRenderer<?> entityRenderer, Entity entity, double posX, double posY, double posZ, float opacity, float partialTicks) {
+		if(mc.render instanceof ShaderRenderer) {
+			ShaderRenderer shadersRenderer = (ShaderRenderer) mc.render;
+			if(shadersRenderer.enableShadowmap) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 }

@@ -6,7 +6,9 @@ import org.lwjgl.opengl.Display;
 import org.lwjgl.util.vector.Matrix4f;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiChat;
 import net.minecraft.client.gui.GuiPhotoMode;
+import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.render.PostProcessingManager;
 import net.minecraft.client.render.camera.CameraUtil;
 import net.minecraft.client.render.camera.ICamera;
@@ -147,9 +149,12 @@ public class Uniforms {
 			fogColorB = 0.0f;
 		}
 		
-		if(mc.currentScreen instanceof GuiPhotoMode) {
+		GuiScreen currentScreen = mc.currentScreen;
+		if(currentScreen instanceof GuiChat) {
+			isGuiOpened = 3;
+		}else if(currentScreen instanceof GuiPhotoMode) {
 			isGuiOpened = 2;
-		}else if(mc.currentScreen != null) {
+		}else if(currentScreen != null) {
 			isGuiOpened = 1;
 		}else {
 			isGuiOpened = 0;

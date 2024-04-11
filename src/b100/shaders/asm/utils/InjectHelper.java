@@ -94,8 +94,10 @@ public class InjectHelper {
 				int opcode;
 				if(c == 'I' || c == 'Z') {
 					opcode = Opcodes.ILOAD;
-				}else if(c == 'F' || c == 'D') {
+				}else if(c == 'F') {
 					opcode = Opcodes.FLOAD;
+				}else if(c == 'D') {
+					opcode = Opcodes.DLOAD;
 				}else if(c == 'L') {
 					opcode = Opcodes.ALOAD;
 					reader.readUntilCharacter(';');
@@ -105,6 +107,9 @@ public class InjectHelper {
 				}
 				
 				insert.add(new VarInsnNode(opcode, parameterIndex++));
+				if(opcode == Opcodes.DLOAD) {
+					parameterIndex++;
+				}
 			}
 		}catch (RuntimeException e) {
 			throw new RuntimeException("Invalid method descriptor '" + method.desc + "' ?", e);

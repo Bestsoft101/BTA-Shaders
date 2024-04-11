@@ -52,6 +52,12 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	private final Shader texturedShader = new Shader();
 	private final Shader skyBasicShader = new Shader();
 	private final Shader skyTexturedShader = new Shader();
+	private final Shader entitiesShader = new Shader();
+	private final Shader cloudsShader = new Shader();
+	private final Shader translucentShader = new Shader();
+	private final Shader handShader = new Shader();
+	
+	public int[] worldOutputTextures;
 	
 	private int fullscreenRectList = 0;
 	
@@ -149,6 +155,25 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 					if(world.has("skytextured")) {
 						skyTexturedShader.setupShader(world.getString("skytextured"));
 					}
+					if(world.has("entities")) {
+						entitiesShader.setupShader(world.getString("entities"));
+					}
+					if(world.has("clouds")) {
+						cloudsShader.setupShader(world.getString("clouds"));
+					}
+					if(world.has("translucent")) {
+						translucentShader.setupShader(world.getString("translucent"));
+					}
+					if(world.has("hand")) {
+						handShader.setupShader(world.getString("hand"));
+					}
+					if(world.has("out")) {
+						worldOutputTextures = parseIntArray(world.getArray("out"));
+					}else {
+						worldOutputTextures = new int[] {0};
+					}
+				}else {
+					worldOutputTextures = new int[] {0};
 				}
 				
 				JsonObject base = root.getObject("base");
@@ -361,7 +386,7 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 			// Setup shadowmap camera
 			glMatrixMode(GL_PROJECTION);
 			glLoadIdentity();
-			glOrtho(-shadowDistance, shadowDistance, -shadowDistance, shadowDistance, -shadowDistance, shadowDistance);
+			glOrtho(-shadowDistance, shadowDistance, -shadowDistance, shadowDistance, -shadowDistance * 3.0f, shadowDistance * 3.0f);
 			glMatrixMode(GL_MODELVIEW);
 			glLoadIdentity();
 			
@@ -448,12 +473,10 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		if(postRenderPasses.size() > 0) {
 			glBindFramebuffer(GL_FRAMEBUFFER, postFramebuffer.id);
 			
-			RenderPass renderPass = postRenderPasses.get(0);
-			
 			intBuffer.clear();
 			
-			for(int inIndex=0; inIndex < renderPass.in.length; inIndex++) {
-				glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + inIndex, GL_TEXTURE_2D, postFramebuffer.colortex[renderPass.in[inIndex]], 0);
+			for(int inIndex=0; inIndex < worldOutputTextures.length; inIndex++) {
+				glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + inIndex, GL_TEXTURE_2D, postFramebuffer.colortex[worldOutputTextures[inIndex]], 0);
 				intBuffer.put(GL_COLOR_ATTACHMENT0 + inIndex);
 			}
 			
@@ -503,6 +526,24 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	}
 	
 	@Override
+	public void beginRenderBasic() {
+		if(isRenderingShadowmap || !enableShaders) {
+			return;
+		}
+		
+		bindWorldShader(basicShader);
+	}
+	
+	@Override
+	public void beginRenderTextured() {
+		if(isRenderingShadowmap || !enableShaders) {
+			return;
+		}
+
+		bindWorldShader(texturedShader);
+	}
+	
+	@Override
 	public void beginRenderSkyBasic() {
 		if(isRenderingShadowmap || !enableShaders) {
 			return;
@@ -528,6 +569,43 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 
 		bindWorldShader(texturedShader);
 	}
+	
+	@Override
+	public void beginRenderClouds() {
+		if(isRenderingShadowmap || !enableShaders) {
+			return;
+		}
+
+		bindWorldShader(cloudsShader);
+	}
+	
+	@Override
+	public void beginRenderEntities() {
+		if(isRenderingShadowmap || !enableShaders) {
+			return;
+		}
+
+		bindWorldShader(entitiesShader);
+	}
+	
+	@Override
+	public void beginRenderTranslucent() {
+		if(isRenderingShadowmap || !enableShaders) {
+			return;
+		}
+
+		bindWorldShader(translucentShader);
+	}
+	
+	@Override
+	public void beginRenderHand() {
+		if(isRenderingShadowmap || !enableShaders) {
+			return;
+		}
+
+		bindWorldShader(handShader);
+	}
+	
 	
 	@Override
 	public void endRenderWorld(float partialTicks) {
@@ -663,7 +741,7 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	public void showTextures(Framebuffer framebuffer, int pos) {
 		// Debug
 		glPushMatrix();
-		glScaled(0.18, 0.18, 1.0);
+		glScaled(0.14, 0.14, 1.0);
 		glTranslated(0.1, 0.1, 0.0);
 		if(pos > 0) {
 			glTranslated(0.0, pos * 1.1, 0.0);	
@@ -793,6 +871,10 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		texturedShader.delete();
 		skyBasicShader.delete();
 		skyTexturedShader.delete();
+		entitiesShader.delete();
+		cloudsShader.delete();
+		translucentShader.delete();
+		handShader.delete();
 		
 		enableShadowmap = false;
 	}

@@ -131,6 +131,19 @@ public class FindInstruction {
 	}
 	
 	/**
+	 * Check if the given instruction is a LdcInsnNode with the given string value
+	 */
+	public static boolean ldcInsnS(AbstractInsnNode node, String cst) {
+		if(node instanceof LdcInsnNode) {
+			LdcInsnNode ldc = (LdcInsnNode) node;
+			if(ldc.cst instanceof String) {
+				return ldc.cst.equals(cst);
+			}
+		}
+		return false;
+	}
+	
+	/**
 	 * Check if the given instruction is a LdcInsnNode with the given value
 	 */
 	public static boolean varInsn(AbstractInsnNode node, int var) {
