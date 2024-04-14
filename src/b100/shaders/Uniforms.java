@@ -19,6 +19,7 @@ import net.minecraft.core.world.World;
 import net.minecraft.core.world.season.Season;
 import net.minecraft.core.world.season.Seasons;
 import net.minecraft.core.world.weather.Weather;
+import net.minecraft.core.world.wind.WindManager;
 
 public class Uniforms {
 	
@@ -34,6 +35,8 @@ public class Uniforms {
 	public int weather;
 	public float weatherIntensity;
 	public float weatherPower;
+	public float windIntensity;
+	public float windDirection;
 	public int isGuiOpened;
 	public int dimension;
 	public int dimensionShadow;
@@ -106,6 +109,15 @@ public class Uniforms {
 			weatherIntensity = world.weatherManager.getWeatherIntensity();
 			weatherPower = world.weatherManager.getWeatherPower();
 			
+			WindManager windManager = world.getWorldType().getWindManager();
+			if(windManager != null) {
+				windDirection = windManager.getWindDirection(world, 0.0f, 500.0f, 0.0f);
+				windIntensity = windManager.getWindIntensity(world, 0.0f, 500.0f, 0.0f);
+			}else {
+				windDirection = 0.0f;
+				windIntensity = 0.0f;
+			}
+			
 			dimension = world.dimension.id;
 			dimensionShadow = world.worldType.hasCeiling() ? 0 : 1;
 			
@@ -141,6 +153,9 @@ public class Uniforms {
 			weatherIntensity = 0.0f;
 			weatherPower = 0.0f;
 			
+			windDirection = 0.0f;
+			windIntensity = 0.0f;
+			
 			dimension = 0;
 			dimensionShadow = 0;
 			
@@ -173,6 +188,9 @@ public class Uniforms {
 
 			MatrixHelper.uniformMatrix(shader.getUniform("gbufferProjectionInverse"), projectionInverseMatrix);
 			MatrixHelper.uniformMatrix(shader.getUniform("gbufferModelViewInverse"), modelViewInverseMatrix);
+
+			MatrixHelper.uniformMatrix(shader.getUniform("gbufferProjection"), projectionMatrix);
+			MatrixHelper.uniformMatrix(shader.getUniform("gbufferModelView"), modelViewMatrix);
 			
 			MatrixHelper.uniformMatrix(shader.getUniform("gbufferPreviousProjection"), previousProjectionMatrix);
 			MatrixHelper.uniformMatrix(shader.getUniform("gbufferPreviousModelView"), previousModelViewMatrix);
@@ -206,6 +224,9 @@ public class Uniforms {
 		glUniform1i(shader.getUniform("weather"), weather);
 		glUniform1f(shader.getUniform("weatherIntensity"), weatherIntensity);
 		glUniform1f(shader.getUniform("weatherPower"), weatherPower);
+		
+		glUniform1f(shader.getUniform("windDirection"), windDirection);
+		glUniform1f(shader.getUniform("windIntensity"), windIntensity);
 		
 		glUniform1i(shader.getUniform("dimension"), dimension);
 		glUniform1i(shader.getUniform("dimensionShadow"), dimensionShadow);

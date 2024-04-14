@@ -2,6 +2,8 @@ package b100.shaders.asm;
 
 import static org.lwjgl.opengl.GL11.*;
 
+import b100.natrium.ChunkRendererMultiDraw;
+import b100.natrium.CustomTessellator;
 import b100.shaders.CustomRenderer;
 import b100.shaders.ShaderRenderer;
 import b100.shaders.asm.utils.CallbackInfo;
@@ -12,15 +14,14 @@ import net.minecraft.client.render.WorldRenderer;
 import net.minecraft.client.render.camera.EntityCamera;
 import net.minecraft.client.render.camera.ICamera;
 import net.minecraft.client.render.entity.EntityRenderer;
+import net.minecraft.core.block.Block;
 import net.minecraft.core.entity.Entity;
 
 public class Listeners {
 	
-	public static Minecraft mc;
+	public static final Minecraft mc = Minecraft.getMinecraft(Minecraft.class);
 	
 	public static void onSetRenderer(Minecraft minecraft, Renderer renderer, CallbackInfo ci) {
-		mc = minecraft;
-		
 		ci.setCancelled(true);
 		
 		if(minecraft.render instanceof ShaderRenderer) {
@@ -166,6 +167,30 @@ public class Listeners {
 			}
 		}
 		return false;
+	}
+	
+	public static void onChunkRenderStart(ChunkRendererMultiDraw chunkRendererMultiDraw, CustomTessellator customTessellator) {
+		if(mc.render instanceof ShaderRenderer) {
+			ShaderRenderer shaderRenderer = (ShaderRenderer) mc.render;
+			customTessellator.addVertexAttrib(shaderRenderer.attributeID);
+			customTessellator.addVertexAttrib(shaderRenderer.attributeTopVertex);
+			shaderRenderer.attributeID.value = 0.0f;
+			shaderRenderer.attributeTopVertex.value = 0.0f;
+		}
+	}
+	
+	public static void setBlockID(Block block) {
+		if(mc.render instanceof ShaderRenderer) {
+			ShaderRenderer shaderRenderer = (ShaderRenderer) mc.render;
+			shaderRenderer.attributeID.value = block.id;
+		}
+	}
+	
+	public static void setIsTopVertex(float topVertex) {
+		if(mc.render instanceof ShaderRenderer) {
+			ShaderRenderer shaderRenderer = (ShaderRenderer) mc.render;
+			shaderRenderer.attributeTopVertex.value = topVertex;
+		}
 	}
 
 }

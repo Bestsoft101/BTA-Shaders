@@ -25,6 +25,8 @@ import b100.json.JsonParser;
 import b100.json.element.JsonArray;
 import b100.json.element.JsonEntry;
 import b100.json.element.JsonObject;
+import b100.natrium.VertexAttribute;
+import b100.natrium.VertexAttributeFloat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.render.Renderer;
 
@@ -52,10 +54,14 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	private final Shader texturedShader = new Shader();
 	private final Shader skyBasicShader = new Shader();
 	private final Shader skyTexturedShader = new Shader();
+	private final Shader terrainShader = new Shader();
 	private final Shader entitiesShader = new Shader();
 	private final Shader cloudsShader = new Shader();
 	private final Shader translucentShader = new Shader();
 	private final Shader handShader = new Shader();
+
+	public final VertexAttributeFloat attributeID = new VertexAttributeFloat("id", 10); 
+	public final VertexAttributeFloat attributeTopVertex = new VertexAttributeFloat("isTopVertex", 11); 
 	
 	public int[] worldOutputTextures;
 	
@@ -143,6 +149,10 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 				
 				JsonObject world = root.getObject("world");
 				if(world != null) {
+					List<VertexAttribute> vertexAttributes = new ArrayList<>();
+					vertexAttributes.add(attributeID);
+					vertexAttributes.add(attributeTopVertex);
+					
 					if(world.has("basic")) {
 						basicShader.setupShader(world.getString("basic"));
 					}
@@ -155,6 +165,9 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 					if(world.has("skytextured")) {
 						skyTexturedShader.setupShader(world.getString("skytextured"));
 					}
+					if(world.has("terrain")) {
+						terrainShader.setupShader(world.getString("terrain"), vertexAttributes);
+					}
 					if(world.has("entities")) {
 						entitiesShader.setupShader(world.getString("entities"));
 					}
@@ -162,7 +175,7 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 						cloudsShader.setupShader(world.getString("clouds"));
 					}
 					if(world.has("translucent")) {
-						translucentShader.setupShader(world.getString("translucent"));
+						translucentShader.setupShader(world.getString("translucent"), vertexAttributes);
 					}
 					if(world.has("hand")) {
 						handShader.setupShader(world.getString("hand"));
@@ -567,7 +580,7 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 			return;
 		}
 
-		bindWorldShader(texturedShader);
+		bindWorldShader(terrainShader);
 	}
 	
 	@Override
@@ -871,6 +884,7 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		texturedShader.delete();
 		skyBasicShader.delete();
 		skyTexturedShader.delete();
+		terrainShader.delete();
 		entitiesShader.delete();
 		cloudsShader.delete();
 		translucentShader.delete();

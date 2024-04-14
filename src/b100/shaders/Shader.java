@@ -7,7 +7,10 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+
+import b100.natrium.VertexAttribute;
 
 public class Shader {
 	
@@ -17,8 +20,12 @@ public class Shader {
 	private int fragmentShader;
 	
 	private Map<String, Integer> uniforms = new HashMap<>();
-	
+
 	public boolean setupShader(String name) {
+		return setupShader(name, null);
+	}
+	
+	public boolean setupShader(String name, List<VertexAttribute> attribs) {
 		delete();
 		
 		String vertexShaderSource = getShaderSource(name + ".vsh");
@@ -63,6 +70,14 @@ public class Shader {
 		
 		glAttachShader(shaderProgram, vertexShader);
 		glAttachShader(shaderProgram, fragmentShader);
+		
+		if(attribs != null) {
+			for(int i=0; i < attribs.size(); i++) {
+				VertexAttribute attrib = attribs.get(i);
+				
+				glBindAttribLocation(shaderProgram, attrib.id, attrib.name);	
+			}
+		}
 		
 		glLinkProgram(shaderProgram);
 		

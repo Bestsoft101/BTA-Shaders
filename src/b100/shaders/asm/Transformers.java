@@ -1,6 +1,7 @@
 package b100.shaders.asm;
 
 import java.lang.reflect.Modifier;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.lwjgl.opengl.GL11;
@@ -202,6 +203,39 @@ public class Transformers {
 			drawDebugEntityOutlines.instructions.insertBefore(drawDebugEntityOutlines.instructions.getFirst(), new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "beginRenderBasic", "()V"));
 			drawDebugChunkBorders.instructions.insertBefore(drawDebugChunkBorders.instructions.getFirst(), new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "beginRenderBasic", "()V"));
 		}
+	}
+	
+	class RenderBlocksTransformer extends ClassTransformer {
+
+		@Override
+		public boolean accepts(String className) {
+			return className.equals("net/minecraft/client/render/RenderBlocks");
+		}
+
+		@Override
+		public void transform(String className, ClassNode classNode) {
+			int pattern = 0b1001100110011001;
+			String[] methods = new String[] {"renderCrossedSquares", "func_1245_b"};
+			
+			for(int j=0; j < methods.length; j++) {
+				MethodNode meth = ASMHelper.findMethod(classNode, methods[j]);
+				List<AbstractInsnNode> nodes = ASMHelper.findAllInstructions(meth.instructions, (n) -> FindInstruction.methodInsn(n, "addVertexWithUV"));
+				for(int i=0; i < nodes.size(); i++) {
+					AbstractInsnNode n = nodes.get(i);
+					
+					InsnList insert = new InsnList();
+					if(((pattern >> (i & 15)) & 1) > 0) {
+						insert.add(new InsnNode(Opcodes.FCONST_1));
+					}else {
+						insert.add(new InsnNode(Opcodes.FCONST_0));
+					}
+					insert.add(new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "setIsTopVertex", "(F)V"));
+					
+					meth.instructions.insertBefore(n, insert);
+				}
+			}
+		}
+		
 	}
 	
 	public static void makePublic(FieldNode field) {
