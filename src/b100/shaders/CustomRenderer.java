@@ -26,4 +26,8 @@ public interface CustomRenderer {
 	
 	public void onClearWorldBuffer();
 	
+	public void setID(float id);
+	
+	public void setIsTopVertex(float topVertex);
+	
 }

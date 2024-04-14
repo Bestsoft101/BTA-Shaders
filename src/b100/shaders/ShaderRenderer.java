@@ -1053,4 +1053,14 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		}
 	}
 
+	@Override
+	public void setID(float id) {
+		attributeID.value = id;
+	}
+
+	@Override
+	public void setIsTopVertex(float topVertex) {
+		attributeTopVertex.value = topVertex;
+	}
+
 }

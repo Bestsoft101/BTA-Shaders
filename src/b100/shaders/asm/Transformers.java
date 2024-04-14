@@ -1,7 +1,6 @@
 package b100.shaders.asm;
 
 import java.lang.reflect.Modifier;
-import java.util.ArrayList;
 import java.util.List;
 
 import org.lwjgl.opengl.GL11;
@@ -179,6 +178,7 @@ public class Transformers {
 		public void transform(String className, ClassNode classNode) {
 			MethodNode updateRenderers = ASMHelper.findMethod(classNode, "updateRenderers");
 			MethodNode drawSky = ASMHelper.findMethod(classNode, "drawSky");
+			MethodNode renderAurora = ASMHelper.findMethod(classNode, "renderAurora");
 			
 			{
 				InsnList insert = injectHelper.createMethodCallInject(classNode, updateRenderers, "updateRenderersCancel");
@@ -202,6 +202,8 @@ public class Transformers {
 			drawSelectionBox.instructions.insertBefore(drawSelectionBox.instructions.getFirst(), new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "beginRenderBasic", "()V"));
 			drawDebugEntityOutlines.instructions.insertBefore(drawDebugEntityOutlines.instructions.getFirst(), new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "beginRenderBasic", "()V"));
 			drawDebugChunkBorders.instructions.insertBefore(drawDebugChunkBorders.instructions.getFirst(), new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "beginRenderBasic", "()V"));
+			
+			renderAurora.instructions.insertBefore(renderAurora.instructions.getFirst(), createMethodCancel(classNode, renderAurora, "beginRenderAurora"));
 		}
 	}
 	

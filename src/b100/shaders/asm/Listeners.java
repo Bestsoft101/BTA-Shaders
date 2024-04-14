@@ -150,6 +150,17 @@ public class Listeners {
 		}
 	}
 	
+	public static boolean beginRenderAurora(RenderGlobal renderGlobal, ICamera camera, float partialTicks) {
+		if(mc.render instanceof ShaderRenderer) {
+			ShaderRenderer shadersRenderer = (ShaderRenderer) mc.render;
+			if(shadersRenderer.isRenderingShadowmap) {
+				return true;
+			}
+		}
+		beginRenderSkyTextured();
+		return false;
+	}
+	
 	public static void setFogMode(int pname, int param) {
 		glFogi(pname, param);
 		if(pname == GL_FOG_MODE) {
@@ -180,16 +191,16 @@ public class Listeners {
 	}
 	
 	public static void setBlockID(Block block) {
-		if(mc.render instanceof ShaderRenderer) {
-			ShaderRenderer shaderRenderer = (ShaderRenderer) mc.render;
-			shaderRenderer.attributeID.value = block.id;
+		if(mc.render instanceof CustomRenderer) {
+			CustomRenderer customRenderer = (CustomRenderer) mc.render;
+			customRenderer.setID(block.id);
 		}
 	}
 	
 	public static void setIsTopVertex(float topVertex) {
-		if(mc.render instanceof ShaderRenderer) {
-			ShaderRenderer shaderRenderer = (ShaderRenderer) mc.render;
-			shaderRenderer.attributeTopVertex.value = topVertex;
+		if(mc.render instanceof CustomRenderer) {
+			CustomRenderer customRenderer = (CustomRenderer) mc.render;
+			customRenderer.setIsTopVertex(topVertex);
 		}
 	}
 
