@@ -44,6 +44,12 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	private final Framebuffer baseFramebuffer = new Framebuffer();
 	private final Framebuffer postFramebuffer = new Framebuffer();
 	
+	private int displayWidth;
+	private int displayHeight;
+	
+	private int renderWidth;
+	private int renderHeight;
+	
 	private final Shader shadowShader = new Shader();
 	public boolean enableShadowmap = false;
 	public boolean isRenderingShadowmap;
@@ -67,9 +73,6 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	
 	private int fullscreenRectList = 0;
 	
-	private int framebufferWidth = -1;
-	private int framebufferHeight = -1;
-
 	private IntBuffer intBuffer = ByteBuffer.allocateDirect(64).order(ByteOrder.nativeOrder()).asIntBuffer();
 	private FloatBuffer floatBuffer = ByteBuffer.allocateDirect(64).order(ByteOrder.nativeOrder()).asFloatBuffer();
 
@@ -106,6 +109,8 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		ShaderMod.log("Shader setup!");
 		
 		loadRenderPassConfig();
+		
+		updateResolution();
 		
 		setupFramebuffers();
 		
@@ -293,19 +298,31 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		return textureCount + 1;
 	}
 	
+	public void updateResolution() {
+		displayWidth = Math.max(1, Display.getWidth());
+		displayHeight = Math.max(1, Display.getHeight());
+		
+		float renderScale = (float) mc.gameSettings.renderScale.value.scale;
+		
+		renderWidth = (int) (displayWidth * renderScale);
+		renderHeight = (int) (displayHeight * renderScale);
+		
+		if(renderWidth == 0 || renderHeight == 0) {
+			renderWidth = displayWidth;
+			renderHeight = displayHeight;
+		}
+	}
+	
 	public void setupFramebuffers() {
-		int width = Display.getWidth();
-		int height = Display.getHeight();
+		ShaderMod.log("Framebuffer Size: " + displayWidth + " x " + displayHeight);
+		if(renderWidth != displayWidth || renderHeight != displayHeight) {
+			ShaderMod.log("Render Resolution: " + renderWidth + " x " + renderHeight);
+		}
 		
-		ShaderMod.log("Framebuffer Size: " + width + " x " + height);
-		
-		this.framebufferWidth = width;
-		this.framebufferHeight = height;
-		
-		baseFramebuffer.setup(width, height);
+		baseFramebuffer.setup(displayWidth, displayHeight);
 		checkFramebufferStatus();
 		
-		postFramebuffer.setup(width, height);
+		postFramebuffer.setup(renderWidth, renderHeight);
 		checkFramebufferStatus();
 		
 		if(enableShadowmap) {
@@ -321,7 +338,17 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	private void checkFramebufferStatus() {
 		int framebufferStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
 		if(framebufferStatus != GL_FRAMEBUFFER_COMPLETE) {
-			throw new RuntimeException("Framebuffer not complete! (Status " + framebufferStatus + ")");
+			String errorName = null;
+			
+			if(framebufferStatus == GL_FRAMEBUFFER_UNDEFINED) errorName = "Framebuffer Undefined";
+			if(framebufferStatus == GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT) errorName = "Incomplete Attachment";
+			if(framebufferStatus == GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT) errorName = "Incomplete Missing Attachment";
+			if(framebufferStatus == GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER) errorName = "Incomplete Draw Buffer";
+			if(framebufferStatus == GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER) errorName = "Incomplete Read Buffer";
+			if(framebufferStatus == GL_FRAMEBUFFER_UNSUPPORTED) errorName = "Framebuffer Unsupported";
+			if(errorName == null) errorName = String.valueOf(errorName);
+			
+			throw new RuntimeException("Framebuffer not complete! (" + errorName + ")");
 		}
 	}
 	
@@ -333,7 +360,9 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 			setup();
 		}
 		
-		if(Display.getWidth() != framebufferWidth || Display.getHeight() != framebufferHeight) {
+		updateResolution();
+		
+		if(displayWidth != baseFramebuffer.width || displayHeight != baseFramebuffer.height || renderWidth != postFramebuffer.width || renderHeight != postFramebuffer.height) {
 			setupFramebuffers();
 		}
 		
@@ -368,6 +397,7 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		
 		if(!enableShaders) {
 			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			glViewport(0, 0, displayWidth, displayHeight);
 			return;
 		}
 		
@@ -463,9 +493,9 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 				mc.gameSettings.clouds.value = false;
 				
 				isRenderingShadowmap = true;
-				glViewport(0, 0, shadowMapResolution, shadowMapResolution);
 				
 				glBindFramebuffer(GL_FRAMEBUFFER, shadowFramebuffer.id);
+				glViewport(0, 0, shadowMapResolution, shadowMapResolution);
 				
 				shadowShader.bind();
 				
@@ -474,17 +504,18 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 				glUseProgram(0);
 				
 				glBindFramebuffer(GL_FRAMEBUFFER, 0);
+				glViewport(0, 0, displayWidth, displayHeight);
+				
 				isRenderingShadowmap = false;
 			}finally {
 				mc.gameSettings.immersiveMode.value = prevImmersiveMode;
 				mc.gameSettings.clouds.value = prevClouds;
 			}
-			
-			glViewport(0, 0, mc.resolution.width, mc.resolution.height);
 		}
 		
 		if(postRenderPasses.size() > 0) {
 			glBindFramebuffer(GL_FRAMEBUFFER, postFramebuffer.id);
+			glViewport(0, 0, postFramebuffer.width, postFramebuffer.height);
 			
 			intBuffer.clear();
 			
@@ -625,6 +656,8 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		if(isRenderingShadowmap) {
 			return;
 		}
+
+		glViewport(0, 0, displayWidth, displayHeight);
 		
 		checkError("pre end render world");
 		
@@ -635,7 +668,7 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		}
 
 		if(postRenderPasses.size() > 0) {
-			postProcessPipeline(postRenderPasses, postFramebuffer, baseRenderPasses.size() > 0 ? baseFramebuffer.id : 0, true, 0);
+			postProcessPipeline(postRenderPasses, postFramebuffer, baseRenderPasses.size() > 0 ? baseFramebuffer : null, true, 0);
 		}
 		
 		glEnable(GL_ALPHA_TEST);
@@ -647,18 +680,21 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	public void endRenderGame(float partialTicks) {
 		checkError("pre end render game");
 
+		glViewport(0, 0, displayWidth, displayHeight);
+		
 		if(!enableShaders) {
 			return;
 		}
-
+		
 		if(baseRenderPasses.size() > 0) {
-			postProcessPipeline(baseRenderPasses, baseFramebuffer, 0, false, 1);
+			postProcessPipeline(baseRenderPasses, baseFramebuffer, null, false, 1);
 		}
 		
 		checkError("end render game");
 
 		glUseProgram(0);
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glViewport(0, 0, displayWidth, displayHeight);
 		
 		if(showTextures) {
 			glDisable(GL_DEPTH_TEST);
@@ -684,8 +720,9 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		}
 	}
 	
-	public void postProcessPipeline(List<RenderPass> renderPasses, Framebuffer framebuffer, int endFramebuffer, boolean enableDepthTex, int stage) {
+	public void postProcessPipeline(List<RenderPass> renderPasses, Framebuffer framebuffer, Framebuffer endFramebuffer, boolean enableDepthTex, int stage) {
 		glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.id);
+		glViewport(0, 0, framebuffer.width, framebuffer.height);
 		
 		int count = renderPasses.size();
 		
@@ -742,7 +779,13 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 			}
 			
 			if(last) {
-				glBindFramebuffer(GL_FRAMEBUFFER, endFramebuffer);
+				if(endFramebuffer != null) {
+					glBindFramebuffer(GL_FRAMEBUFFER, endFramebuffer.id);
+					glViewport(0, 0, endFramebuffer.width, endFramebuffer.height);
+				}else {
+					glBindFramebuffer(GL_FRAMEBUFFER, 0);
+					glViewport(0, 0, displayWidth, displayHeight);
+				}
 			}
 			
 			drawFramebuffer();
@@ -900,6 +943,9 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		int depthtex;
 		boolean[] mipmap;
 		
+		int width;
+		int height;
+		
 		void create(int colorTextures, boolean[] mipmap) {
 			id = glGenFramebuffers();
 			
@@ -935,6 +981,9 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthtex, 0);
+			
+			this.width = width;
+			this.height = height;
 		}
 		
 		void setActiveTexture(int attachment, int texture) {
