@@ -50,6 +50,9 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	private int renderWidth;
 	private int renderHeight;
 	
+	public int currentWidth;
+	public int currentHeight;
+	
 	private final Shader shadowShader = new Shader();
 	public boolean enableShadowmap = false;
 	public boolean isRenderingShadowmap;
@@ -311,6 +314,9 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 			renderWidth = displayWidth;
 			renderHeight = displayHeight;
 		}
+		
+		currentWidth = displayWidth;
+		currentHeight = displayHeight;
 	}
 	
 	public void setupFramebuffers() {
@@ -516,6 +522,8 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		if(postRenderPasses.size() > 0) {
 			glBindFramebuffer(GL_FRAMEBUFFER, postFramebuffer.id);
 			glViewport(0, 0, postFramebuffer.width, postFramebuffer.height);
+			currentWidth = renderWidth;
+			currentHeight = renderHeight;
 			
 			intBuffer.clear();
 			
@@ -723,6 +731,8 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	public void postProcessPipeline(List<RenderPass> renderPasses, Framebuffer framebuffer, Framebuffer endFramebuffer, boolean enableDepthTex, int stage) {
 		glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.id);
 		glViewport(0, 0, framebuffer.width, framebuffer.height);
+		currentWidth = framebuffer.width;
+		currentHeight = framebuffer.height;
 		
 		int count = renderPasses.size();
 		
@@ -782,9 +792,13 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 				if(endFramebuffer != null) {
 					glBindFramebuffer(GL_FRAMEBUFFER, endFramebuffer.id);
 					glViewport(0, 0, endFramebuffer.width, endFramebuffer.height);
+					currentWidth = endFramebuffer.width;
+					currentHeight = endFramebuffer.height;
 				}else {
 					glBindFramebuffer(GL_FRAMEBUFFER, 0);
 					glViewport(0, 0, displayWidth, displayHeight);
+					currentWidth = displayWidth;
+					currentHeight = displayHeight;
 				}
 			}
 			

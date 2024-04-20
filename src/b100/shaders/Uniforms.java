@@ -2,7 +2,6 @@ package b100.shaders;
 
 import static org.lwjgl.opengl.GL20.*;
 
-import org.lwjgl.opengl.Display;
 import org.lwjgl.util.vector.Matrix4f;
 
 import net.minecraft.client.Minecraft;
@@ -177,8 +176,8 @@ public class Uniforms {
 	}
 	
 	public void apply(Shader shader, int stage) {
-		glUniform1f(shader.getUniform("viewWidth"), Display.getWidth());
-		glUniform1f(shader.getUniform("viewHeight"), Display.getHeight());
+		glUniform1f(shader.getUniform("viewWidth"), renderer.currentWidth);
+		glUniform1f(shader.getUniform("viewHeight"), renderer.currentHeight);
 
 		if(stage == 0) {
 			if(renderer.enableShadowmap) {
