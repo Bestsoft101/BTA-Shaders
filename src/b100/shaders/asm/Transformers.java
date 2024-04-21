@@ -167,6 +167,29 @@ public class Transformers {
 		
 	}
 	
+	class ChunkRendererTransformer extends ClassTransformer {
+		
+		@Override
+		public boolean accepts(String className) {
+			return className.equals("net/minecraft/client/render/ChunkRenderer");
+		}
+
+		@Override
+		public void transform(String className, ClassNode classNode) {
+			MethodNode updateRenderer = ASMHelper.findMethod(classNode, "updateRenderer", "()V");
+			
+			AbstractInsnNode render = ASMHelper.findInstruction(updateRenderer, false, (n) -> FindInstruction.methodInsn(n, "net/minecraft/client/render/block/model/BlockModel", "render", "(Lnet/minecraft/client/render/tessellator/Tessellator;III)Z"));
+			InsnList insert = new InsnList();
+			insert.add(new VarInsnNode(Opcodes.ALOAD, 0));  // this
+			insert.add(new VarInsnNode(Opcodes.ALOAD, 19)); // block
+			insert.add(new VarInsnNode(Opcodes.ILOAD, 17)); // x
+			insert.add(new VarInsnNode(Opcodes.ILOAD, 15)); // y
+			insert.add(new VarInsnNode(Opcodes.ILOAD, 16)); // z
+			insert.add(new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "beforeRenderBlock", "(Lnet/minecraft/client/render/ChunkRenderer;Lnet/minecraft/core/block/Block;III)V"));
+			updateRenderer.instructions.insertBefore(render, insert);
+		}
+	}
+		
 	class RenderGlobalTransformer extends ClassTransformer {
 
 		@Override
@@ -211,13 +234,13 @@ public class Transformers {
 
 		@Override
 		public boolean accepts(String className) {
-			return className.equals("net/minecraft/client/render/RenderBlocks");
+			return className.equals("net/minecraft/client/render/block/model/BlockModelCrossedSquares") || className.equals("net/minecraft/client/render/block/model/BlockModelCropsWheat");
 		}
 
 		@Override
 		public void transform(String className, ClassNode classNode) {
 			int pattern = 0b1001100110011001;
-			String[] methods = new String[] {"renderCrossedSquares", "func_1245_b"};
+			String[] methods = new String[] {"render"};
 			
 			for(int j=0; j < methods.length; j++) {
 				MethodNode meth = ASMHelper.findMethod(classNode, methods[j]);
@@ -237,7 +260,19 @@ public class Transformers {
 				}
 			}
 		}
+	}
+	
+	class LightmapHelperTransformer extends ClassTransformer {
 		
+		@Override
+		public boolean accepts(String className) {
+			return className.equals("net/minecraft/client/render/LightmapHelper");
+		}
+
+		@Override
+		public void transform(String className, ClassNode classNode) {
+			makePublic(ASMHelper.findField(classNode, "lightmapTexture"));
+		}
 	}
 	
 	public static void makePublic(FieldNode field) {

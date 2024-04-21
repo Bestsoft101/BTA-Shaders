@@ -203,7 +203,7 @@ public class Uniforms {
 		if(mc.theWorld != null && mc.thePlayer != null) {
 			World world = mc.theWorld;
 			
-			Season currentSeason = world.seasonManager.getCurrentSeason(); 
+			Season currentSeason = world.getSeasonManager().getCurrentSeason(); 
 			
 			spring = currentSeason == Seasons.OVERWORLD_SPRING;
 			summer = currentSeason == Seasons.OVERWORLD_SUMMER;

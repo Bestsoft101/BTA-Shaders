@@ -2,18 +2,19 @@ package b100.shaders.asm;
 
 import static org.lwjgl.opengl.GL11.*;
 
-import b100.natrium.ChunkRendererMultiDraw;
 import b100.natrium.CustomTessellator;
 import b100.shaders.CustomRenderer;
 import b100.shaders.ShaderRenderer;
 import b100.shaders.asm.utils.CallbackInfo;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.render.ChunkRenderer;
 import net.minecraft.client.render.RenderGlobal;
 import net.minecraft.client.render.Renderer;
 import net.minecraft.client.render.WorldRenderer;
 import net.minecraft.client.render.camera.EntityCamera;
 import net.minecraft.client.render.camera.ICamera;
 import net.minecraft.client.render.entity.EntityRenderer;
+import net.minecraft.client.render.tessellator.Tessellator;
 import net.minecraft.core.block.Block;
 import net.minecraft.core.entity.Entity;
 
@@ -170,7 +171,7 @@ public class Listeners {
 			}
 		}
 	}
-	public static boolean beforeRenderShadow(EntityRenderer<?> entityRenderer, Entity entity, double posX, double posY, double posZ, float opacity, float partialTicks) {
+	public static boolean beforeRenderShadow(EntityRenderer<?> entityRenderer, Tessellator tessellator, Entity entity, double posX, double posY, double posZ, float opacity, float partialTicks) {
 		if(mc.render instanceof ShaderRenderer) {
 			ShaderRenderer shadersRenderer = (ShaderRenderer) mc.render;
 			if(shadersRenderer.enableShadowmap) {
@@ -180,7 +181,7 @@ public class Listeners {
 		return false;
 	}
 	
-	public static void onChunkRenderStart(ChunkRendererMultiDraw chunkRendererMultiDraw, CustomTessellator customTessellator) {
+	public static void onChunkRenderStart(CustomTessellator customTessellator) {
 		if(mc.render instanceof ShaderRenderer) {
 			ShaderRenderer shaderRenderer = (ShaderRenderer) mc.render;
 			customTessellator.addVertexAttrib(shaderRenderer.attributeID);
@@ -202,6 +203,10 @@ public class Listeners {
 			CustomRenderer customRenderer = (CustomRenderer) mc.render;
 			customRenderer.setIsTopVertex(topVertex);
 		}
+	}
+	
+	public static void beforeRenderBlock(ChunkRenderer chunkRenderer, Block block, int x, int y, int z) {
+		setBlockID(block);
 	}
 
 }

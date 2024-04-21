@@ -28,6 +28,7 @@ import b100.json.element.JsonObject;
 import b100.natrium.VertexAttribute;
 import b100.natrium.VertexAttributeFloat;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.render.LightmapHelper;
 import net.minecraft.client.render.Renderer;
 
 public class ShaderRenderer extends Renderer implements CustomRenderer {
@@ -553,6 +554,13 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		if(currentShader.bind()) {
 			glUniform1i(shader.getUniform("fogMode"), fogMode);
 			
+			if(LightmapHelper.isLightmapEnabled()) {
+				glActiveTexture(GL_TEXTURE1);
+				glBindTexture(GL_TEXTURE_2D, mc.worldRenderer.lightmapHelper.lightmapTexture);
+				glUniform1i(shader.getUniform("lightmap"), 1);
+				glActiveTexture(GL_TEXTURE0);
+			}
+			
 			setupCommonUniforms(shader, 0);
 		}
 	}
@@ -744,29 +752,40 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 				// Setup input textures
 				setupCommonUniforms(renderPass.shader, stage);
 				
+				int textureId = 0;
+				
 				for(int inIndex=0; inIndex < renderPass.in.length; inIndex++) {
-					glActiveTexture(GL_TEXTURE0 + inIndex);
+					glActiveTexture(GL_TEXTURE0 + textureId);
 					glBindTexture(GL_TEXTURE_2D, framebuffer.colortex[renderPass.in[inIndex]]);
-					glUniform1i(renderPass.shader.getUniform(colortexStrings[inIndex]), inIndex);
-					
+					glUniform1i(renderPass.shader.getUniform(colortexStrings[inIndex]), textureId);
 					if(framebuffer.mipmap[renderPass.in[inIndex]]) {
 						glGenerateMipmap(GL_TEXTURE_2D);
 					}
+					textureId++;
 				}
 				
 				if(enableDepthTex) {
-					int depthTex = renderPass.in.length;
-					glActiveTexture(GL_TEXTURE0 + depthTex);
+					glActiveTexture(GL_TEXTURE0 + textureId);
 					glBindTexture(GL_TEXTURE_2D, framebuffer.depthtex);
-					glUniform1i(renderPass.shader.getUniform("depthtex0"), depthTex);
+					glUniform1i(renderPass.shader.getUniform("depthtex0"), textureId);
+					textureId++;
 					
 					if(enableShadowmap) {
-						int shadowTex = depthTex + 1;
-						glActiveTexture(GL_TEXTURE0 + shadowTex);
+						glActiveTexture(GL_TEXTURE0 + textureId);
 						glBindTexture(GL_TEXTURE_2D, shadowFramebuffer.depthtex);
-						glUniform1i(renderPass.shader.getUniform("shadowtex0"), shadowTex);
+						glUniform1i(renderPass.shader.getUniform("shadowtex0"), textureId);
+						textureId++;
 					}
 				}
+				
+				/*
+				if(LightmapHelper.isLightmapEnabled()) {
+					glActiveTexture(GL_TEXTURE0 + textureId);
+					glBindTexture(GL_TEXTURE_2D, shadowFramebuffer.depthtex);
+					glUniform1i(renderPass.shader.getUniform("lightmap"), textureId);
+					textureId++;
+				}
+				*/
 				
 				glActiveTexture(GL_TEXTURE0);
 			}else {
