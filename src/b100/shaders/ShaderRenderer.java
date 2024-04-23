@@ -27,8 +27,10 @@ import b100.json.element.JsonEntry;
 import b100.json.element.JsonObject;
 import b100.natrium.VertexAttribute;
 import b100.natrium.VertexAttributeFloat;
+import net.minecraft.client.GLAllocation;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.render.LightmapHelper;
+import net.minecraft.client.render.RenderBlocks;
 import net.minecraft.client.render.Renderer;
 
 public class ShaderRenderer extends Renderer implements CustomRenderer {
@@ -74,11 +76,13 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	public final VertexAttributeFloat attributeTopVertex = new VertexAttributeFloat("isTopVertex", 11); 
 	
 	public int[] worldOutputTextures;
+
+	private int fullscreenRectVAO;
+	private int fullscreenRectVBO;
 	
-	private int fullscreenRectList = 0;
-	
-	private IntBuffer intBuffer = ByteBuffer.allocateDirect(64).order(ByteOrder.nativeOrder()).asIntBuffer();
-	private FloatBuffer floatBuffer = ByteBuffer.allocateDirect(64).order(ByteOrder.nativeOrder()).asFloatBuffer();
+	private ByteBuffer byteBuffer = ByteBuffer.allocateDirect(256).order(ByteOrder.nativeOrder());
+	private IntBuffer intBuffer = byteBuffer.asIntBuffer();
+	private FloatBuffer floatBuffer = byteBuffer.asFloatBuffer();
 
 	private boolean enableShaders = true;
 	private boolean showTextures = false;
@@ -117,6 +121,13 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		updateResolution();
 		
 		setupFramebuffers();
+		
+		RenderBlocks.SIDE_LIGHT_MULTIPLIER[0] = 1.0f;
+		RenderBlocks.SIDE_LIGHT_MULTIPLIER[1] = 1.0f;
+		RenderBlocks.SIDE_LIGHT_MULTIPLIER[2] = 1.0f;
+		RenderBlocks.SIDE_LIGHT_MULTIPLIER[3] = 1.0f;
+		RenderBlocks.SIDE_LIGHT_MULTIPLIER[4] = 1.0f;
+		RenderBlocks.SIDE_LIGHT_MULTIPLIER[5] = 1.0f;
 		
 		checkError("setup");
 	}
@@ -203,11 +214,14 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 				
 				if(base != null) {
 					parseRenderConfig(base, baseRenderPasses, baseFramebuffer);
+				}else {
+					baseFramebuffer.create(0, new boolean[] {false});
 				}
 				if(post != null) {
 					parseRenderConfig(post, postRenderPasses, postFramebuffer);
+				}else {
+					postFramebuffer.create(0, new boolean[] {false});
 				}
-				
 			}
 			
 			ShaderMod.log("Render Passes: " + baseRenderPasses.size() + " Base, " + postRenderPasses.size() + " Post");
@@ -362,6 +376,37 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	@Override
 	public void beginRenderGame(float partialTicks) {
 		checkError("pre begin render game");
+		
+		if(fullscreenRectVAO == 0) {
+			ShaderMod.log("Create Fullscreen VAO");
+
+			checkError("pre vao setup");
+			
+			byteBuffer.clear();
+			byteBuffer.putShort((short) 0).putShort((short) 0);
+			byteBuffer.putShort((short) 0).putShort((short) 1);
+			byteBuffer.putShort((short) 1).putShort((short) 1);
+			byteBuffer.putShort((short) 1).putShort((short) 0);
+			byteBuffer.flip();
+			
+			fullscreenRectVBO = glGenBuffers();
+			glBindBuffer(GL_ARRAY_BUFFER, fullscreenRectVBO);
+			glBufferData(GL_ARRAY_BUFFER, byteBuffer, GL_STATIC_DRAW);
+			
+			fullscreenRectVAO = glGenVertexArrays();
+			glBindVertexArray(fullscreenRectVAO);
+			
+			glEnableClientState(GL_VERTEX_ARRAY);
+			glVertexPointer(2, GL_SHORT, 4, 0);
+			
+			glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+			glTexCoordPointer(2, GL_SHORT, 4, 0);
+			
+			glBindBuffer(GL_ARRAY_BUFFER, 0);
+			glBindVertexArray(0);
+			
+			checkError("vao setup");
+		}
 		
 		if(!isSetup) {
 			setup();
@@ -571,7 +616,7 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 			return;
 		}
 		
-		if(postRenderPasses.size() > 1) {
+		if(postFramebuffer.colortex != null) {
 			// TODO make color configurable
 			floatBuffer.clear();
 			floatBuffer.put(0.0f);
@@ -579,7 +624,7 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 			floatBuffer.put(0.0f);
 			floatBuffer.put(0.0f);
 			floatBuffer.flip();
-			for(int i = 1; i < postRenderPasses.size(); i++) {
+			for(int i = 1; i < postFramebuffer.colortex.length; i++) {
 				glClearBuffer(GL_COLOR, i, floatBuffer);	
 			}
 		}
@@ -713,26 +758,7 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		glViewport(0, 0, displayWidth, displayHeight);
 		
 		if(showTextures) {
-			glDisable(GL_DEPTH_TEST);
-			glDisable(GL_ALPHA_TEST);
-			glDisable(GL_BLEND);
-			
-			glMatrixMode(GL_PROJECTION);
-			glLoadIdentity();
-			glOrtho(0, 1, 0, 1, -1, 1);
-			glMatrixMode(GL_MODELVIEW);
-			glLoadIdentity();
-			
-			int pos = 0;
-			if(baseRenderPasses.size() > 0) {
-				showTextures(baseFramebuffer, pos++);
-			}
-			if(postRenderPasses.size() > 0) {
-				showTextures(postFramebuffer, pos++);
-			}
-			if(enableShadowmap) {
-				showTextures(shadowFramebuffer, pos++);
-			}
+			showFramebufferTextures();
 		}
 	}
 	
@@ -827,7 +853,46 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		glUseProgram(0);
 	}
 	
-	public void showTextures(Framebuffer framebuffer, int pos) {
+	public void showFramebufferTextures() {
+		glDisable(GL_DEPTH_TEST);
+		glDisable(GL_ALPHA_TEST);
+		glDisable(GL_LIGHTING);
+		glDisable(GL_FOG);
+		glDisable(GL_BLEND);
+		
+		glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+		
+		/*
+		glActiveTexture(GL_TEXTURE1);
+		glClientActiveTexture(GL_TEXTURE1);
+		
+		glDisable(GL_TEXTURE_2D);
+		glBindTexture(GL_TEXTURE_2D, 0);
+		glMultiTexCoord2f(GL_TEXTURE1, 0.0f, 0.0f);
+		
+		glActiveTexture(GL_TEXTURE0);
+		glClientActiveTexture(GL_TEXTURE0);
+		*/
+		
+		glMatrixMode(GL_PROJECTION);
+		glLoadIdentity();
+		glOrtho(0, 1, 0, 1, -1, 1);
+		glMatrixMode(GL_MODELVIEW);
+		glLoadIdentity();
+		
+		int pos = 0;
+		if(baseFramebuffer.colortex != null) {
+			showFramebufferTextures(baseFramebuffer, pos++);	
+		}
+		if(postFramebuffer.colortex != null) {
+			showFramebufferTextures(postFramebuffer, pos++);
+		}
+		if(shadowFramebuffer.colortex != null) {
+			showFramebufferTextures(shadowFramebuffer, pos++);
+		}
+	}
+	
+	public void showFramebufferTextures(Framebuffer framebuffer, int pos) {
 		// Debug
 		glPushMatrix();
 		glScaled(0.14, 0.14, 1.0);
@@ -908,34 +973,9 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	}
 	
 	private void drawFullscreenRect() {
+		glBindVertexArray(fullscreenRectVAO);
+		glDrawArrays(GL_QUADS, 0, 4);
 		glBindVertexArray(0);
-		glBindBuffer(GL_ARRAY_BUFFER, 0);
-		
-		if(fullscreenRectList == 0) {
-			int[] data = new int[] { 0, 0, 0, 1, 1, 1, 1, 0 };
-			ByteBuffer buffer = ByteBuffer.allocateDirect(data.length * 2).order(ByteOrder.nativeOrder());
-			for(int i=0; i < data.length; i++) {
-				buffer.putShort((short) data[i]);
-			}
-			
-			glEnableClientState(GL_VERTEX_ARRAY);
-			glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-			
-			buffer.position(0);
-			glVertexPointer(2, GL_SHORT, 4, buffer);
-			buffer.position(0);
-			glTexCoordPointer(2, GL_SHORT, 4, buffer);
-			
-			fullscreenRectList = glGenLists(1);
-			glNewList(fullscreenRectList, GL_COMPILE);
-			glDrawArrays(GL_QUADS, 0, 4);
-			glEndList();
-			
-			glDisableClientState(GL_VERTEX_ARRAY);
-			glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-		}
-		
-		glCallList(fullscreenRectList);
 	}
 	
 	@Override
@@ -984,10 +1024,10 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 			
 			colortex = new int[colorTextures];
 			for(int i=0; i < colortex.length; i++) {
-				colortex[i] = glGenTextures();
+				colortex[i] = GLAllocation.generateTexture();
 			}
 			
-			depthtex = glGenTextures();
+			depthtex = GLAllocation.generateTexture();
 			this.mipmap = mipmap;
 		}
 		

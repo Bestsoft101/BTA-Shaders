@@ -2,6 +2,7 @@ package b100.shaders;
 
 import static org.lwjgl.opengl.GL20.*;
 
+import org.lwjgl.opengl.Display;
 import org.lwjgl.util.vector.Matrix4f;
 
 import net.minecraft.client.Minecraft;
@@ -11,8 +12,11 @@ import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.render.PostProcessingManager;
 import net.minecraft.client.render.camera.CameraUtil;
 import net.minecraft.client.render.camera.ICamera;
+import net.minecraft.core.block.Block;
 import net.minecraft.core.block.material.Material;
 import net.minecraft.core.entity.player.EntityPlayer;
+import net.minecraft.core.enums.LightLayer;
+import net.minecraft.core.item.ItemStack;
 import net.minecraft.core.util.helper.MathHelper;
 import net.minecraft.core.world.World;
 import net.minecraft.core.world.season.Season;
@@ -39,6 +43,8 @@ public class Uniforms {
 	public int isGuiOpened;
 	public int dimension;
 	public int dimensionShadow;
+	public int heldItemID;
+	public float heldItemLightValue;
 	
 	public final Matrix4f shadowProjectionMatrix = new Matrix4f();
 	public final Matrix4f shadowModelViewMatrix = new Matrix4f();
@@ -65,6 +71,9 @@ public class Uniforms {
 	public float fogColorG;
 	public float fogColorB;
 	
+	public int eyeBrightnessSky;
+	public int eyeBrightnessBlock;
+	
 	public Uniforms(ShaderRenderer shaderRenderer) {
 		this.renderer = shaderRenderer;
 		this.mc = shaderRenderer.mc;
@@ -90,13 +99,17 @@ public class Uniforms {
 			}else {
 				isEyeInLiquid = 0;
 			}
-			
+
 			int playerX = MathHelper.floor_double(player.x);
+			int playerY = MathHelper.floor_double(player.y);
 			int playerZ = MathHelper.floor_double(player.z);
 			
 			biomeTemperature = (float) world.getBlockTemperature(playerX, playerZ);
 			biomeHumidity = (float) world.getBlockHumidity(playerX, playerZ);
 			sunAngle = world.getCelestialAngle(partialTicks);
+			
+			eyeBrightnessBlock = world.getSavedLightValue(LightLayer.Block, playerX, playerY, playerZ);
+			eyeBrightnessSky = world.getSavedLightValue(LightLayer.Sky, playerX, playerY, playerZ);
 			
 			Weather currentWeather = world.weatherManager.getCurrentWeather();
 			if(currentWeather != null) {
@@ -143,6 +156,19 @@ public class Uniforms {
 			fogColorR = mc.worldRenderer.fogManager.fogRed;
 			fogColorG = mc.worldRenderer.fogManager.fogGreen;
 			fogColorB = mc.worldRenderer.fogManager.fogBlue;
+			
+			heldItemID = 0;
+			heldItemLightValue = 0.0f;
+			
+			if(player != null) {
+				ItemStack heldItem = player.getHeldItem();
+				if(heldItem != null) {
+					heldItemID = heldItem.itemID;
+					if(heldItemID < Block.lightEmission.length) {
+						heldItemLightValue = Block.lightEmission[heldItemID] / 15.0f;
+					}
+				}
+			}
 		}else {
 			biomeTemperature = 0.7f;
 			biomeHumidity = 0.5f;
@@ -161,6 +187,12 @@ public class Uniforms {
 			fogColorR = 0.0f;
 			fogColorG = 0.0f;
 			fogColorB = 0.0f;
+			
+			heldItemID = 0;
+			heldItemLightValue = 0.0f;
+			
+			eyeBrightnessBlock = 0;
+			eyeBrightnessSky = 0;
 		}
 		
 		GuiScreen currentScreen = mc.currentScreen;
@@ -176,9 +208,18 @@ public class Uniforms {
 	}
 	
 	public void apply(Shader shader, int stage) {
-		glUniform1f(shader.getUniform("viewWidth"), renderer.currentWidth);
-		glUniform1f(shader.getUniform("viewHeight"), renderer.currentHeight);
-
+		float width = renderer.currentWidth;
+		float height = renderer.currentHeight;
+		float aspectRatio = width / height;
+		
+		glUniform1f(shader.getUniform("viewWidth"), width);
+		glUniform1f(shader.getUniform("viewHeight"), height);
+		
+		glUniform1f(shader.getUniform("aspectRatio"), aspectRatio);
+		
+		glUniform1f(shader.getUniform("displayWidth"), Display.getWidth());
+		glUniform1f(shader.getUniform("displayHeight"), Display.getHeight());
+		
 		if(stage == 0) {
 			if(renderer.enableShadowmap) {
 				MatrixHelper.uniformMatrix(shader.getUniform("shadowProjection"), shadowProjectionMatrix);
@@ -251,6 +292,10 @@ public class Uniforms {
 		glUniform1i(shader.getUniform("isEyeInLiquid"), isEyeInLiquid);
 		glUniform1i(shader.getUniform("isGuiOpened"), isGuiOpened);
 		glUniform1i(shader.getUniform("isWorldOpened"), mc.thePlayer != null && mc.theWorld != null ? 1 : 0);
+		glUniform2i(shader.getUniform("eyeBrightness"), eyeBrightnessSky, eyeBrightnessBlock);
+
+		glUniform1i(shader.getUniform("heldItemID"), heldItemID);
+		glUniform1f(shader.getUniform("heldItemLightValue"), heldItemLightValue);
 		
 		glUniform3f(shader.getUniform("cameraPosition"), cameraPosX, cameraPosY, cameraPosZ);
 		glUniform3f(shader.getUniform("previousCameraPosition"), previousCameraPosX, previousCameraPosY, previousCameraPosZ);

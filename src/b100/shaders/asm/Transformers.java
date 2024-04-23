@@ -86,9 +86,7 @@ public class Transformers {
 				renderWorld.instructions.insertBefore(firstSortAndRenderNode, new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "beginRenderTerrain", "()V"));
 			}
 			
-			{
-				renderWorld.instructions.insert(ASMHelper.findInstruction(renderWorld, false, (n) -> FindInstruction.methodInsn(n, "glClear")), new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "onClearWorldBuffer", "()V"));
-			}
+			renderWorld.instructions.insert(ASMHelper.findInstruction(renderWorld, false, (n) -> FindInstruction.methodInsn(n, "glClear")), new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "onClearWorldBuffer", "()V"));
 			
 			{
 				AbstractInsnNode water = ASMHelper.findInstruction(renderWorld, false, (n) -> FindInstruction.ldcInsnS(n, "water"));
