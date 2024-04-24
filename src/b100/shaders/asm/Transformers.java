@@ -225,6 +225,12 @@ public class Transformers {
 			drawDebugChunkBorders.instructions.insertBefore(drawDebugChunkBorders.instructions.getFirst(), new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "beginRenderBasic", "()V"));
 			
 			renderAurora.instructions.insertBefore(renderAurora.instructions.getFirst(), createMethodCancel(classNode, renderAurora, "beginRenderAurora"));
+			
+			{
+				AbstractInsnNode glPushMatrix = ASMHelper.findAllInstructions(drawSky.instructions, (n) -> FindInstruction.methodInsn(n, "glPushMatrix")).get(1);
+				AbstractInsnNode glTranslatef = ASMHelper.findInstruction(glPushMatrix, false, (n) -> FindInstruction.methodInsn(n, "glTranslatef"));
+				drawSky.instructions.insert(glTranslatef, new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "setSunPathRotation", "()V"));
+			}
 		}
 	}
 	

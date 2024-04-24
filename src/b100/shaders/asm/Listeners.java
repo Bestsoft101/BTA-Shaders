@@ -77,7 +77,19 @@ public class Listeners {
 			if(shadersRenderer.isRenderingShadowmap) {
 				ci.setCancelled(true);
 				ci.setReturnValue(true);
+				return;
 			}
+		}
+		if(mc.render instanceof CustomRenderer) {
+			CustomRenderer customRenderer = (CustomRenderer) mc.render;
+			customRenderer.beginRenderWeather();
+		}
+	}
+	
+	public static void setSunPathRotation() {
+		if(mc.render instanceof ShaderRenderer) {
+			ShaderRenderer shadersRenderer = (ShaderRenderer) mc.render;
+			shadersRenderer.setSunPathRotation();
 		}
 	}
 	

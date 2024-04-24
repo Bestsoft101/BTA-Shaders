@@ -61,6 +61,7 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	public boolean isRenderingShadowmap;
 	public int shadowMapResolution = 1024;
 	public float shadowDistance = 64.0f;
+	public float sunPathRotation = 0.0f;
 
 	private final Shader basicShader = new Shader();
 	private final Shader texturedShader = new Shader();
@@ -68,8 +69,9 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	private final Shader skyTexturedShader = new Shader();
 	private final Shader terrainShader = new Shader();
 	private final Shader entitiesShader = new Shader();
-	private final Shader cloudsShader = new Shader();
 	private final Shader translucentShader = new Shader();
+	private final Shader weatherShader = new Shader();
+	private final Shader cloudsShader = new Shader();
 	private final Shader handShader = new Shader();
 
 	public final VertexAttributeFloat attributeID = new VertexAttributeFloat("id", 10); 
@@ -165,6 +167,9 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 					if(shadow.has("shader")) {
 						shadowShader.setupShader(shadow.getString("shader"));
 					}
+					if(shadow.has("sunPathRotation")) {
+						sunPathRotation = shadow.getFloat("sunPathRotation");
+					}
 				}
 				
 				JsonObject world = root.getObject("world");
@@ -191,11 +196,14 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 					if(world.has("entities")) {
 						entitiesShader.setupShader(world.getString("entities"));
 					}
-					if(world.has("clouds")) {
-						cloudsShader.setupShader(world.getString("clouds"));
-					}
 					if(world.has("translucent")) {
 						translucentShader.setupShader(world.getString("translucent"), vertexAttributes);
+					}
+					if(world.has("weather")) {
+						weatherShader.setupShader(world.getString("weather"));
+					}
+					if(world.has("clouds")) {
+						cloudsShader.setupShader(world.getString("clouds"));
 					}
 					if(world.has("hand")) {
 						handShader.setupShader(world.getString("hand"));
@@ -497,6 +505,7 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 			}
 			
 			glRotatef(-sunAngle * 360.0f - 90.0f, 0.0f, 0.0f, 1.0f);
+			glRotatef(sunPathRotation, 1.0f, 0.0f, 0.0f);
 
 			glTranslated(renderPosX % 4.0, renderPosY % 4.0, renderPosZ % 4.0);
 			
@@ -506,6 +515,10 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 			return true;
 		}
 		return false;
+	}
+	
+	public void setSunPathRotation() {
+		glRotatef(-sunPathRotation, 1.0f, 0.0f, 0.0f);
 	}
 
 	@Override
@@ -676,15 +689,6 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	}
 	
 	@Override
-	public void beginRenderClouds() {
-		if(isRenderingShadowmap || !enableShaders) {
-			return;
-		}
-
-		bindWorldShader(cloudsShader);
-	}
-	
-	@Override
 	public void beginRenderEntities() {
 		if(isRenderingShadowmap || !enableShaders) {
 			return;
@@ -700,6 +704,24 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		}
 
 		bindWorldShader(translucentShader);
+	}
+	
+	@Override
+	public void beginRenderWeather() {
+		if(isRenderingShadowmap || !enableShaders) {
+			return;
+		}
+
+		bindWorldShader(weatherShader);
+	}
+	
+	@Override
+	public void beginRenderClouds() {
+		if(isRenderingShadowmap || !enableShaders) {
+			return;
+		}
+
+		bindWorldShader(cloudsShader);
 	}
 	
 	@Override
@@ -1002,11 +1024,13 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		skyTexturedShader.delete();
 		terrainShader.delete();
 		entitiesShader.delete();
-		cloudsShader.delete();
 		translucentShader.delete();
+		weatherShader.delete();
+		cloudsShader.delete();
 		handShader.delete();
 		
 		enableShadowmap = false;
+		sunPathRotation = 0.0f;
 	}
 	
 	static class Framebuffer {

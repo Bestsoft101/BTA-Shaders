@@ -20,6 +20,8 @@ public interface CustomRenderer {
 	
 	public void beginRenderTranslucent();
 	
+	public void beginRenderWeather();
+	
 	public void beginRenderClouds();
 	
 	public void beginRenderHand();

@@ -35,9 +35,14 @@ public class Uniforms {
 	public float biomeTemperature;
 	public float biomeHumidity;
 	public float sunAngle;
+	
 	public int weather;
 	public float weatherIntensity;
 	public float weatherPower;
+	public float weatherFogDistance;
+	public int weatherSubtractLightLevel;
+	public int weatherPrecipitationType;
+	
 	public float windIntensity;
 	public float windDirection;
 	public int isGuiOpened;
@@ -113,9 +118,15 @@ public class Uniforms {
 			
 			Weather currentWeather = world.weatherManager.getCurrentWeather();
 			if(currentWeather != null) {
-				weather = currentWeather.weatherId;	
+				weather = currentWeather.weatherId;
+				weatherFogDistance = currentWeather.fogDistance;
+				weatherSubtractLightLevel = currentWeather.subtractLightLevel;
+				weatherPrecipitationType = currentWeather.precipitationType;
 			}else {
 				weather = 0;
+				weatherFogDistance = 0.0f;
+				weatherSubtractLightLevel = 0;
+				weatherPrecipitationType = 0;
 			}
 			
 			weatherIntensity = world.weatherManager.getWeatherIntensity();
@@ -173,8 +184,11 @@ public class Uniforms {
 			biomeTemperature = 0.7f;
 			biomeHumidity = 0.5f;
 			isEyeInLiquid = 0;
-			
+
 			weather = 0;
+			weatherFogDistance = 0.0f;
+			weatherSubtractLightLevel = 0;
+			weatherPrecipitationType = 0;
 			weatherIntensity = 0.0f;
 			weatherPower = 0.0f;
 			
@@ -264,6 +278,9 @@ public class Uniforms {
 		glUniform1i(shader.getUniform("weather"), weather);
 		glUniform1f(shader.getUniform("weatherIntensity"), weatherIntensity);
 		glUniform1f(shader.getUniform("weatherPower"), weatherPower);
+		glUniform1f(shader.getUniform("weatherFogDistance"), weatherFogDistance);
+		glUniform1i(shader.getUniform("weatherSubtractLightLevel"), weatherSubtractLightLevel);
+		glUniform1f(shader.getUniform("weatherPrecipitationType"), weatherPrecipitationType);
 		
 		glUniform1f(shader.getUniform("windDirection"), windDirection);
 		glUniform1f(shader.getUniform("windIntensity"), windIntensity);
