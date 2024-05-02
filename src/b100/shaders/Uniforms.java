@@ -291,11 +291,13 @@ public class Uniforms {
 		glUniform1f(shader.getUniform("frameTimeCounter"), frameTimeCounter);
 
 		glUniform1f(shader.getUniform("gamma"), mc.gameSettings.gamma.value);
+		glUniform1f(shader.getUniform("brightness"), mc.gameSettings.brightness.value);
 		glUniform1f(shader.getUniform("colorCorrection"), mc.gameSettings.colorCorrection.value);
 		glUniform1f(shader.getUniform("fxaa"), mc.gameSettings.fxaa.value);
 		glUniform1i(shader.getUniform("bloom"), mc.gameSettings.bloom.value);
 		glUniform1i(shader.getUniform("heatHaze"), mc.gameSettings.heatHaze.value ? 1 : 0);
 		glUniform1i(shader.getUniform("cbCorrectionMode"), mc.gameSettings.colorblindnessFix.value.ordinal());
+		glUniform1i(shader.getUniform("fullbright"), mc.fullbright ? 1 : 0);
 		
 		PostProcessingManager ppm = mc.ppm;
 		glUniform1f(shader.getUniform("brightness"), ppm.brightness);
