@@ -13,6 +13,7 @@ import net.minecraft.client.render.Renderer;
 import net.minecraft.client.render.WorldRenderer;
 import net.minecraft.client.render.camera.EntityCamera;
 import net.minecraft.client.render.camera.ICamera;
+import net.minecraft.client.render.culling.CameraFrustum;
 import net.minecraft.client.render.entity.EntityRenderer;
 import net.minecraft.client.render.tessellator.Tessellator;
 import net.minecraft.core.block.Block;
@@ -25,19 +26,19 @@ public class Listeners {
 	public static void onSetRenderer(Minecraft minecraft, Renderer renderer, CallbackInfo ci) {
 		ci.setCancelled(true);
 		
-		if(minecraft.render instanceof ShaderRenderer) {
+		if(minecraft.renderer instanceof ShaderRenderer) {
 			return;
 		}
 		
-		if(minecraft.render != null) {
-			minecraft.render.delete();
+		if(minecraft.renderer != null) {
+			minecraft.renderer.delete();
 		}
-		minecraft.render = new ShaderRenderer(minecraft);
+		minecraft.renderer = new ShaderRenderer(minecraft);
 	}
 	
 	public static void beforeSetupCameraTransform(WorldRenderer worldRenderer, float partialTicks, CallbackInfo ci) {
-		if(mc.render instanceof CustomRenderer) {
-			CustomRenderer customRenderer = (CustomRenderer) mc.render;
+		if(mc.renderer instanceof CustomRenderer) {
+			CustomRenderer customRenderer = (CustomRenderer) mc.renderer;
 			if(customRenderer.beforeSetupCameraTransform(partialTicks)) {
 				ci.setCancelled(true);
 			}
@@ -45,15 +46,15 @@ public class Listeners {
 	}
 	
 	public static void afterSetupCameraTransform(WorldRenderer worldRenderer, float partialTicks, CallbackInfo ci) {
-		if(mc.render instanceof CustomRenderer) {
-			CustomRenderer customRenderer = (CustomRenderer) mc.render;
+		if(mc.renderer instanceof CustomRenderer) {
+			CustomRenderer customRenderer = (CustomRenderer) mc.renderer;
 			customRenderer.afterSetupCameraTransform(partialTicks);
 		}
 	}
 	
 	public static void showPlayerOverride(EntityCamera entityCamera, CallbackInfo ci) {
-		if(mc.render instanceof ShaderRenderer) {
-			ShaderRenderer shadersRenderer = (ShaderRenderer) mc.render;
+		if(mc.renderer instanceof ShaderRenderer) {
+			ShaderRenderer shadersRenderer = (ShaderRenderer) mc.renderer;
 			if(shadersRenderer.isRenderingShadowmap) {
 				ci.setCancelled(true);
 				ci.setReturnValue(true);
@@ -62,8 +63,8 @@ public class Listeners {
 	}
 	
 	public static void updateRenderersCancel(RenderGlobal renderGlobal, ICamera camera, CallbackInfo ci) {
-		if(mc.render instanceof ShaderRenderer) {
-			ShaderRenderer shadersRenderer = (ShaderRenderer) mc.render;
+		if(mc.renderer instanceof ShaderRenderer) {
+			ShaderRenderer shadersRenderer = (ShaderRenderer) mc.renderer;
 			if(shadersRenderer.isRenderingShadowmap) {
 				ci.setCancelled(true);
 				ci.setReturnValue(true);
@@ -72,100 +73,100 @@ public class Listeners {
 	}
 	
 	public static void renderRainSnowCancel(WorldRenderer worldRenderer, float partialTicks, CallbackInfo ci) {
-		if(mc.render instanceof ShaderRenderer) {
-			ShaderRenderer shadersRenderer = (ShaderRenderer) mc.render;
+		if(mc.renderer instanceof ShaderRenderer) {
+			ShaderRenderer shadersRenderer = (ShaderRenderer) mc.renderer;
 			if(shadersRenderer.isRenderingShadowmap) {
 				ci.setCancelled(true);
 				ci.setReturnValue(true);
 				return;
 			}
 		}
-		if(mc.render instanceof CustomRenderer) {
-			CustomRenderer customRenderer = (CustomRenderer) mc.render;
+		if(mc.renderer instanceof CustomRenderer) {
+			CustomRenderer customRenderer = (CustomRenderer) mc.renderer;
 			customRenderer.beginRenderWeather();
 		}
 	}
 	
 	public static void setSunPathRotation() {
-		if(mc.render instanceof ShaderRenderer) {
-			ShaderRenderer shadersRenderer = (ShaderRenderer) mc.render;
+		if(mc.renderer instanceof ShaderRenderer) {
+			ShaderRenderer shadersRenderer = (ShaderRenderer) mc.renderer;
 			shadersRenderer.setSunPathRotation();
 		}
 	}
 	
 	public static void onClearWorldBuffer() {
-		if(mc.render instanceof CustomRenderer) {
-			CustomRenderer customRenderer = (CustomRenderer) mc.render;
+		if(mc.renderer instanceof CustomRenderer) {
+			CustomRenderer customRenderer = (CustomRenderer) mc.renderer;
 			customRenderer.onClearWorldBuffer();
 		}
 	}
 	
 	public static void beginRenderBasic() {
-		if(mc.render instanceof CustomRenderer) {
-			CustomRenderer customRenderer = (CustomRenderer) mc.render;
+		if(mc.renderer instanceof CustomRenderer) {
+			CustomRenderer customRenderer = (CustomRenderer) mc.renderer;
 			customRenderer.beginRenderBasic();
 		}
 	}
 	
 	public static void beginRenderTextured() {
-		if(mc.render instanceof CustomRenderer) {
-			CustomRenderer customRenderer = (CustomRenderer) mc.render;
+		if(mc.renderer instanceof CustomRenderer) {
+			CustomRenderer customRenderer = (CustomRenderer) mc.renderer;
 			customRenderer.beginRenderTextured();
 		}
 	}
 	
 	public static void beginRenderTerrain() {
-		if(mc.render instanceof CustomRenderer) {
-			CustomRenderer customRenderer = (CustomRenderer) mc.render;
+		if(mc.renderer instanceof CustomRenderer) {
+			CustomRenderer customRenderer = (CustomRenderer) mc.renderer;
 			customRenderer.beginRenderTerrain();
 		}
 	}
 	
 	public static void beginRenderSkyBasic() {
-		if(mc.render instanceof CustomRenderer) {
-			CustomRenderer customRenderer = (CustomRenderer) mc.render;
+		if(mc.renderer instanceof CustomRenderer) {
+			CustomRenderer customRenderer = (CustomRenderer) mc.renderer;
 			customRenderer.beginRenderSkyBasic();
 		}
 	}
 	
 	public static void beginRenderSkyTextured() {
-		if(mc.render instanceof CustomRenderer) {
-			CustomRenderer customRenderer = (CustomRenderer) mc.render;
+		if(mc.renderer instanceof CustomRenderer) {
+			CustomRenderer customRenderer = (CustomRenderer) mc.renderer;
 			customRenderer.beginRenderSkyTextured();
 		}
 	}
 	
 	public static void beginRenderTranslucent() {
-		if(mc.render instanceof CustomRenderer) {
-			CustomRenderer customRenderer = (CustomRenderer) mc.render;
+		if(mc.renderer instanceof CustomRenderer) {
+			CustomRenderer customRenderer = (CustomRenderer) mc.renderer;
 			customRenderer.beginRenderTranslucent();
 		}
 	}
 	
 	public static void beginRenderClouds() {
-		if(mc.render instanceof CustomRenderer) {
-			CustomRenderer customRenderer = (CustomRenderer) mc.render;
+		if(mc.renderer instanceof CustomRenderer) {
+			CustomRenderer customRenderer = (CustomRenderer) mc.renderer;
 			customRenderer.beginRenderClouds();
 		}
 	}
 	
 	public static void beginRenderEntities() {
-		if(mc.render instanceof CustomRenderer) {
-			CustomRenderer customRenderer = (CustomRenderer) mc.render;
+		if(mc.renderer instanceof CustomRenderer) {
+			CustomRenderer customRenderer = (CustomRenderer) mc.renderer;
 			customRenderer.beginRenderEntities();
 		}
 	}
 	
 	public static void beginRenderHand() {
-		if(mc.render instanceof CustomRenderer) {
-			CustomRenderer customRenderer = (CustomRenderer) mc.render;
+		if(mc.renderer instanceof CustomRenderer) {
+			CustomRenderer customRenderer = (CustomRenderer) mc.renderer;
 			customRenderer.beginRenderHand();
 		}
 	}
 	
 	public static boolean beginRenderAurora(RenderGlobal renderGlobal, ICamera camera, float partialTicks) {
-		if(mc.render instanceof ShaderRenderer) {
-			ShaderRenderer shadersRenderer = (ShaderRenderer) mc.render;
+		if(mc.renderer instanceof ShaderRenderer) {
+			ShaderRenderer shadersRenderer = (ShaderRenderer) mc.renderer;
 			if(shadersRenderer.isRenderingShadowmap) {
 				return true;
 			}
@@ -177,15 +178,23 @@ public class Listeners {
 	public static void setFogMode(int pname, int param) {
 		glFogi(pname, param);
 		if(pname == GL_FOG_MODE) {
-			if(mc.render instanceof ShaderRenderer) {
-				ShaderRenderer shadersRenderer = (ShaderRenderer) mc.render;
+			if(mc.renderer instanceof ShaderRenderer) {
+				ShaderRenderer shadersRenderer = (ShaderRenderer) mc.renderer;
 				shadersRenderer.fogMode = param;
 			}
 		}
 	}
+	
+	public static void updateCelestialPosition() {
+		if(mc.renderer instanceof ShaderRenderer) {
+			ShaderRenderer shaderRenderer = (ShaderRenderer) mc.renderer;
+			shaderRenderer.uniforms.updateCelestialPosition();
+		}
+	}
+	
 	public static boolean beforeRenderShadow(EntityRenderer<?> entityRenderer, Tessellator tessellator, Entity entity, double posX, double posY, double posZ, float opacity, float partialTicks) {
-		if(mc.render instanceof ShaderRenderer) {
-			ShaderRenderer shadersRenderer = (ShaderRenderer) mc.render;
+		if(mc.renderer instanceof ShaderRenderer) {
+			ShaderRenderer shadersRenderer = (ShaderRenderer) mc.renderer;
 			if(shadersRenderer.enableShadowmap) {
 				return true;
 			}
@@ -194,31 +203,40 @@ public class Listeners {
 	}
 	
 	public static void onChunkRenderStart(CustomTessellator customTessellator) {
-		if(mc.render instanceof ShaderRenderer) {
-			ShaderRenderer shaderRenderer = (ShaderRenderer) mc.render;
+		if(mc.renderer instanceof ShaderRenderer) {
+			ShaderRenderer shaderRenderer = (ShaderRenderer) mc.renderer;
 			customTessellator.addVertexAttrib(shaderRenderer.attributeID);
 			customTessellator.addVertexAttrib(shaderRenderer.attributeTopVertex);
 			shaderRenderer.attributeID.value = 0.0f;
 			shaderRenderer.attributeTopVertex.value = 0.0f;
+			customTessellator.enableAutoNormal();
 		}
 	}
 	
 	public static void setBlockID(Block block) {
-		if(mc.render instanceof CustomRenderer) {
-			CustomRenderer customRenderer = (CustomRenderer) mc.render;
+		if(mc.renderer instanceof CustomRenderer) {
+			CustomRenderer customRenderer = (CustomRenderer) mc.renderer;
 			customRenderer.setID(block.id);
 		}
 	}
 	
 	public static void setIsTopVertex(float topVertex) {
-		if(mc.render instanceof CustomRenderer) {
-			CustomRenderer customRenderer = (CustomRenderer) mc.render;
+		if(mc.renderer instanceof CustomRenderer) {
+			CustomRenderer customRenderer = (CustomRenderer) mc.renderer;
 			customRenderer.setIsTopVertex(topVertex);
 		}
 	}
 	
 	public static void beforeRenderBlock(ChunkRenderer chunkRenderer, Block block, int x, int y, int z) {
 		setBlockID(block);
+	}
+	
+	public static boolean cancelFrustumCulling(RenderGlobal renderGlobal, CameraFrustum frustum, float partialTicks) {
+		if(mc.renderer instanceof ShaderRenderer) {
+			ShaderRenderer shaderRenderer = (ShaderRenderer) mc.renderer;
+			return shaderRenderer.isRenderingShadowmap;
+		}
+		return false;
 	}
 
 }

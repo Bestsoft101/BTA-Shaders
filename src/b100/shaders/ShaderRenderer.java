@@ -23,17 +23,21 @@ import org.lwjgl.util.vector.Matrix4f;
 
 import b100.json.JsonParser;
 import b100.json.element.JsonArray;
+import b100.json.element.JsonElement;
 import b100.json.element.JsonEntry;
 import b100.json.element.JsonObject;
-import b100.natrium.VertexAttribute;
-import b100.natrium.VertexAttributeFloat;
+import b100.natrium.TerrainRenderer;
+import b100.natrium.vertex.VertexAttribute;
+import b100.natrium.vertex.VertexAttributeFloat;
 import net.minecraft.client.GLAllocation;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.render.LightmapHelper;
 import net.minecraft.client.render.RenderBlocks;
 import net.minecraft.client.render.Renderer;
 
-public class ShaderRenderer extends Renderer implements CustomRenderer {
+public class ShaderRenderer implements Renderer, CustomRenderer {
+	
+	public Minecraft mc;
 	
 	private final List<RenderPass> postRenderPasses = new ArrayList<>();
 	private final List<RenderPass> baseRenderPasses = new ArrayList<>();
@@ -62,6 +66,8 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	public int shadowMapResolution = 1024;
 	public float shadowDistance = 64.0f;
 	public float sunPathRotation = 0.0f;
+
+	public boolean directionalLight = true;
 
 	private final Shader basicShader = new Shader();
 	private final Shader texturedShader = new Shader();
@@ -93,19 +99,22 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	private boolean pressedToggleLast = false;
 	private boolean pressedShowTexturesLast = false;
 	
-	public final Uniforms uniforms = new Uniforms(this);
+	public final Uniforms uniforms;
 	
 	public int fogMode;
 	
 	private Shader currentShader;
 	
-	public ShaderRenderer(Minecraft mc) {
-		super(mc);
+	public ShaderRenderer(Minecraft minecraft) {
+		mc = minecraft;
+		uniforms = new Uniforms(this);
 		
 		ShaderMod.log("Shader Directory: " + ShaderMod.getShaderDirectory());
 	}
 	
 	private void setup() {
+		boolean prevDirectionalLight = directionalLight;
+		
 		isSetup = true;
 		
 		checkError("pre setup");
@@ -124,14 +133,13 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		
 		setupFramebuffers();
 		
-		RenderBlocks.SIDE_LIGHT_MULTIPLIER[0] = 1.0f;
-		RenderBlocks.SIDE_LIGHT_MULTIPLIER[1] = 1.0f;
-		RenderBlocks.SIDE_LIGHT_MULTIPLIER[2] = 1.0f;
-		RenderBlocks.SIDE_LIGHT_MULTIPLIER[3] = 1.0f;
-		RenderBlocks.SIDE_LIGHT_MULTIPLIER[4] = 1.0f;
-		RenderBlocks.SIDE_LIGHT_MULTIPLIER[5] = 1.0f;
+		RenderBlocks.enableDirectionalLight = directionalLight;
 		
 		checkError("setup");
+		
+		if(directionalLight != prevDirectionalLight) {
+			mc.renderGlobal.loadRenderers();
+		}
 	}
 	
 	public void loadRenderPassConfig() {
@@ -147,7 +155,13 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 				return;
 			}else {
 				ShaderMod.log("Loading shader.json");
-
+				
+				if(root.has("directionalLight")) {
+					directionalLight = root.getBoolean("directionalLight");
+				}else {
+					directionalLight = true;
+				}
+				
 				JsonObject shadow = root.getObject("shadow");
 				if(shadow != null) {
 					enableShadowmap = shadow.getBoolean("enable");
@@ -223,12 +237,12 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 				if(base != null) {
 					parseRenderConfig(base, baseRenderPasses, baseFramebuffer);
 				}else {
-					baseFramebuffer.create(0, new boolean[] {false});
+					baseFramebuffer.create(0, new TextureConfig[] {new TextureConfig()});
 				}
 				if(post != null) {
 					parseRenderConfig(post, postRenderPasses, postFramebuffer);
 				}else {
-					postFramebuffer.create(0, new boolean[] {false});
+					postFramebuffer.create(0, new TextureConfig[] {new TextureConfig()});
 				}
 			}
 			
@@ -241,8 +255,8 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 			
 			delete();
 			
-			baseFramebuffer.create(1, new boolean[] { false });
-			postFramebuffer.create(1, new boolean[] { false });
+			baseFramebuffer.create(1, new TextureConfig[] {new TextureConfig()});
+			postFramebuffer.create(1, new TextureConfig[] {new TextureConfig()});
 		}
 	}
 	
@@ -287,7 +301,10 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		
 		int textureCount = getTextureCount(renderPasses);
 		
-		boolean[] mipmap = new boolean[textureCount];
+		TextureConfig[] textureConfigs = new TextureConfig[textureCount];
+		for(int i=0; i < textureConfigs.length; i++) {
+			textureConfigs[i] = new TextureConfig();
+		}
 		
 		JsonObject textureConfig = object.getObject("textures");
 		if(textureConfig != null) {
@@ -298,12 +315,21 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 				
 				JsonObject obj = entry.value.getAsObject();
 				if(obj.has("mipmap")) {
-					mipmap[textureID] = obj.getBoolean("mipmap");
+					textureConfigs[textureID].enableMipmap = obj.getBoolean("mipmap");
+				}
+				JsonElement type = obj.get("type");
+				if(type != null) {
+					if(type.isNumber()) {
+						textureConfigs[i].type = type.getAsNumber().getInteger();
+					}else {
+						textureConfigs[i].type = TextureConfig.getType(type.getAsString().value);
+					}
+					ShaderMod.log("Texture " + textureID + " type: " + textureConfigs[i].type);
 				}
 			}
 		}
 		
-		framebuffer.create(textureCount, mipmap);
+		framebuffer.create(textureCount, textureConfigs);
 	}
 	
 	public int getTextureCount(List<RenderPass> renderPasses) {
@@ -461,9 +487,6 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 			return;
 		}
 		
-		// Update uniforms
-		uniforms.update(partialTicks);
-		
 		// Setup framebuffer for rendering
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		
@@ -534,10 +557,13 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 			
 			MatrixHelper.getMatrix(GL_PROJECTION_MATRIX, uniforms.projectionMatrix);
 			MatrixHelper.getMatrix(GL_MODELVIEW_MATRIX, uniforms.modelViewMatrix);
-			
+
 			Matrix4f.invert(uniforms.projectionMatrix, uniforms.projectionInverseMatrix);
 			Matrix4f.invert(uniforms.modelViewMatrix, uniforms.modelViewInverseMatrix);
 		}
+		
+		// Update uniforms
+		uniforms.update(partialTicks);
 	}
 	
 	@Override
@@ -564,7 +590,12 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 				
 				shadowShader.bind();
 				
-				mc.worldRenderer.renderWorld(partialTicks, 0L);
+				try {
+					TerrainRenderer.drawAll = true;
+					mc.worldRenderer.renderWorld(partialTicks, 0L);	
+				}finally {
+					TerrainRenderer.drawAll = false;	
+				}
 				
 				glUseProgram(0);
 				
@@ -806,7 +837,7 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 					glActiveTexture(GL_TEXTURE0 + textureId);
 					glBindTexture(GL_TEXTURE_2D, framebuffer.colortex[renderPass.in[inIndex]]);
 					glUniform1i(renderPass.shader.getUniform(colortexStrings[inIndex]), textureId);
-					if(framebuffer.mipmap[renderPass.in[inIndex]]) {
+					if(framebuffer.textureConfig[renderPass.in[inIndex]].enableMipmap) {
 						glGenerateMipmap(GL_TEXTURE_2D);
 					}
 					textureId++;
@@ -1038,12 +1069,12 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 		int id;
 		int[] colortex;
 		int depthtex;
-		boolean[] mipmap;
+		TextureConfig[] textureConfig;
 		
 		int width;
 		int height;
 		
-		void create(int colorTextures, boolean[] mipmap) {
+		void create(int colorTextures, TextureConfig[] textureConfig) {
 			id = glGenFramebuffers();
 			
 			colortex = new int[colorTextures];
@@ -1052,17 +1083,17 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 			}
 			
 			depthtex = GLAllocation.generateTexture();
-			this.mipmap = mipmap;
+			this.textureConfig = textureConfig;
 		}
 		
 		void setup(int width, int height) {
 			glBindFramebuffer(GL_FRAMEBUFFER, id);
 			
 			for(int i=0; i < colortex.length; i++) {
-				boolean mipmapTex = mipmap[i];
+				boolean mipmapTex = textureConfig[i].enableMipmap;
 				
 				glBindTexture(GL_TEXTURE_2D, colortex[i]);
-				glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, (ByteBuffer) null);
+				glTexImage2D(GL_TEXTURE_2D, 0, textureConfig[i].type, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, (ByteBuffer) null);
 				if(mipmapTex) glGenerateMipmap(GL_TEXTURE_2D);
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
@@ -1158,6 +1189,26 @@ public class ShaderRenderer extends Renderer implements CustomRenderer {
 	@Override
 	public void setIsTopVertex(float topVertex) {
 		attributeTopVertex.value = topVertex;
+	}
+
+	@Override
+	public void reload() {
+		
+	}
+
+	@Override
+	public void create() {
+		
+	}
+
+	@Override
+	public int getRenderWidth() {
+		return postFramebuffer.width;
+	}
+
+	@Override
+	public int getRenderHeight() {
+		return postFramebuffer.height;
 	}
 
 }

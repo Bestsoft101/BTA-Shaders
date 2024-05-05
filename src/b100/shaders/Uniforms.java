@@ -3,12 +3,16 @@ package b100.shaders;
 import static org.lwjgl.opengl.GL20.*;
 
 import org.lwjgl.opengl.Display;
+import org.lwjgl.opengl.GL11;
 import org.lwjgl.util.vector.Matrix4f;
+import org.lwjgl.util.vector.Vector3f;
+import org.lwjgl.util.vector.Vector4f;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiChat;
 import net.minecraft.client.gui.GuiPhotoMode;
 import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.client.render.FogManager;
 import net.minecraft.client.render.PostProcessingManager;
 import net.minecraft.client.render.camera.CameraUtil;
 import net.minecraft.client.render.camera.ICamera;
@@ -63,25 +67,38 @@ public class Uniforms {
 	public final Matrix4f previousProjectionMatrix = new Matrix4f();
 	public final Matrix4f previousModelViewMatrix = new Matrix4f();
 	
-	public float cameraPosX;
-	public float cameraPosY;
-	public float cameraPosZ;
-	
-	public boolean previousCameraPositionSet = false;
-	public float previousCameraPosX;
-	public float previousCameraPosY;
-	public float previousCameraPosZ;
-	
-	public float fogColorR;
-	public float fogColorG;
-	public float fogColorB;
-	
 	public int eyeBrightnessSky;
 	public int eyeBrightnessBlock;
+
+	public boolean previousCameraPositionSet = false;
+	private Vector3f cameraPos = new Vector3f();
+	private Vector3f prevCameraPos = new Vector3f();
+	private Vector4f shadowLightPosition = new Vector4f();
+	private Vector4f moonPosition = new Vector4f();
+	private Vector4f sunPosition = new Vector4f();
+	private Vector3f fogColor = new Vector3f();
+	
+	private Matrix4f matrixBuffer = new Matrix4f();
 	
 	public Uniforms(ShaderRenderer shaderRenderer) {
 		this.renderer = shaderRenderer;
 		this.mc = shaderRenderer.mc;
+	}
+	
+	public void updateCelestialPosition() {
+		MatrixHelper.getMatrix(GL11.GL_MODELVIEW_MATRIX, matrixBuffer);
+		
+		sunPosition.set(0.0f, 100.0f, 0.0f, 0.0f);
+		moonPosition.set(0.0f, -100.0f, 0.0f, 0.0f);
+
+		Matrix4f.transform(matrixBuffer, sunPosition, sunPosition);
+		Matrix4f.transform(matrixBuffer, moonPosition, moonPosition);
+		
+		if(sunAngle > 0.25f && sunAngle < 0.75f) {
+			shadowLightPosition.set(moonPosition.x, moonPosition.y, moonPosition.z, sunPosition.w);
+		}else {
+			shadowLightPosition.set(sunPosition.x, sunPosition.y, sunPosition.z, sunPosition.w);
+		}
 	}
 	
 	public void update(float partialTicks) {
@@ -145,28 +162,21 @@ public class Uniforms {
 			dimensionShadow = world.worldType.hasCeiling() ? 0 : 1;
 			
 			ICamera camera = mc.activeCamera;
-			float renderPosX = (float) camera.getX(partialTicks);
-			float renderPosY = (float) camera.getY(partialTicks);
-			float renderPosZ = (float) camera.getZ(partialTicks);
+			double renderPosX = camera.getX(partialTicks);
+			double renderPosY = camera.getY(partialTicks);
+			double renderPosZ = camera.getZ(partialTicks);
 			
 			if(!previousCameraPositionSet) {
 				previousCameraPositionSet = true;
-				previousCameraPosX = renderPosX;
-				previousCameraPosY = renderPosY;
-				previousCameraPosZ = renderPosZ;
+				prevCameraPos.set((float) renderPosX, (float) renderPosY, (float) renderPosZ);
 			}else {
-				previousCameraPosX = cameraPosX;
-				previousCameraPosY = cameraPosY;
-				previousCameraPosZ = cameraPosZ;
+				prevCameraPos.set(cameraPos);
 			}
 			
-			cameraPosX = renderPosX;
-			cameraPosY = renderPosY;
-			cameraPosZ = renderPosZ;
+			cameraPos.set((float) renderPosX, (float) renderPosY, (float) renderPosZ);
 			
-			fogColorR = mc.worldRenderer.fogManager.fogRed;
-			fogColorG = mc.worldRenderer.fogManager.fogGreen;
-			fogColorB = mc.worldRenderer.fogManager.fogBlue;
+			FogManager fogManager = mc.worldRenderer.fogManager;
+			fogColor.set(fogManager.fogRed, fogManager.fogGreen, fogManager.fogBlue);
 			
 			heldItemID = 0;
 			heldItemLightValue = 0.0f;
@@ -198,9 +208,12 @@ public class Uniforms {
 			dimension = 0;
 			dimensionShadow = 0;
 			
-			fogColorR = 0.0f;
-			fogColorG = 0.0f;
-			fogColorB = 0.0f;
+			this.fogColor.set(0.0f, 0.0f, 0.0f);
+			this.cameraPos.set(0.0f, 0.0f, 0.0f);
+			this.prevCameraPos.set(0.0f, 0.0f, 0.0f);
+			this.moonPosition.set(0.0f, 0.0f, 0.0f);
+			this.sunPosition.set(0.0f, 0.0f, 0.0f);
+			this.shadowLightPosition.set(0.0f, 0.0f, 0.0f);
 			
 			heldItemID = 0;
 			heldItemLightValue = 0.0f;
@@ -300,13 +313,13 @@ public class Uniforms {
 		glUniform1i(shader.getUniform("fullbright"), mc.fullbright ? 1 : 0);
 		
 		PostProcessingManager ppm = mc.ppm;
-		glUniform1f(shader.getUniform("brightness"), ppm.brightness);
-		glUniform1f(shader.getUniform("contrast"), ppm.contrast);
-		glUniform1f(shader.getUniform("exposure"), ppm.exposure);
-		glUniform1f(shader.getUniform("saturation"), ppm.saturation);
-		glUniform1f(shader.getUniform("rMod"), ppm.rMod);
-		glUniform1f(shader.getUniform("gMod"), ppm.gMod);
-		glUniform1f(shader.getUniform("bMod"), ppm.bMod);
+		glUniform1f(shader.getUniform("cc_brightness"), ppm.brightness);
+		glUniform1f(shader.getUniform("cc_contrast"), ppm.contrast);
+		glUniform1f(shader.getUniform("cc_exposure"), ppm.exposure);
+		glUniform1f(shader.getUniform("cc_saturation"), ppm.saturation);
+		glUniform1f(shader.getUniform("cc_rMod"), ppm.rMod);
+		glUniform1f(shader.getUniform("cc_gMod"), ppm.gMod);
+		glUniform1f(shader.getUniform("cc_bMod"), ppm.bMod);
 
 		glUniform1i(shader.getUniform("isEyeInLiquid"), isEyeInLiquid);
 		glUniform1i(shader.getUniform("isGuiOpened"), isGuiOpened);
@@ -316,10 +329,20 @@ public class Uniforms {
 		glUniform1i(shader.getUniform("heldItemID"), heldItemID);
 		glUniform1f(shader.getUniform("heldItemLightValue"), heldItemLightValue);
 		
-		glUniform3f(shader.getUniform("cameraPosition"), cameraPosX, cameraPosY, cameraPosZ);
-		glUniform3f(shader.getUniform("previousCameraPosition"), previousCameraPosX, previousCameraPosY, previousCameraPosZ);
-		
-		glUniform3f(shader.getUniform("fogColor"), fogColorR, fogColorG, fogColorB);
+		uniform3f(shader.getUniform("cameraPosition"), cameraPos);
+		uniform3f(shader.getUniform("previousCameraPosition"), prevCameraPos);
+		uniform3f(shader.getUniform("shadowLightPosition"), shadowLightPosition);
+		uniform3f(shader.getUniform("sunPosition"), sunPosition);
+		uniform3f(shader.getUniform("moonPosition"), moonPosition);
+		uniform3f(shader.getUniform("fogColor"), fogColor);
+	}
+	
+	public static void uniform3f(int location, Vector3f vec) {
+		glUniform3f(location, vec.x, vec.y, vec.z);
+	}
+	
+	public static void uniform3f(int location, Vector4f vec) {
+		glUniform3f(location, vec.x, vec.y, vec.z);
 	}
 
 }

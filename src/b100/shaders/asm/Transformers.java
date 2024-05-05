@@ -61,7 +61,7 @@ public class Transformers {
 			MethodNode setupCameraTransform = ASMHelper.findMethod(classNode, "setupCameraTransform");
 			MethodNode renderRainSnow = ASMHelper.findMethod(classNode, "renderRainSnow");
 			MethodNode renderWorld = ASMHelper.findMethod(classNode, "renderWorld");
-			MethodNode setupPlayerCamera = ASMHelper.findMethod(classNode, "setupPlayerCamera");
+			MethodNode renderHand = ASMHelper.findMethod(classNode, "renderHand");
 			
 			ASMHelper.findAllInstructions(setupCameraTransform.instructions, (n) -> n.getOpcode() == Opcodes.RETURN).forEach((returnNode) -> {
 				setupCameraTransform.instructions.insertBefore(returnNode, injectHelper.createMethodCallInject(classNode, setupCameraTransform, "afterSetupCameraTransform"));
@@ -103,7 +103,7 @@ public class Transformers {
 			}
 			
 			{
-				setupPlayerCamera.instructions.insertBefore(setupPlayerCamera.instructions.getFirst(), new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "beginRenderHand", "()V"));
+				renderHand.instructions.insertBefore(renderHand.instructions.getFirst(), new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "beginRenderHand", "()V"));
 			}
 		}
 		
@@ -200,6 +200,7 @@ public class Transformers {
 			MethodNode updateRenderers = ASMHelper.findMethod(classNode, "updateRenderers");
 			MethodNode drawSky = ASMHelper.findMethod(classNode, "drawSky");
 			MethodNode renderAurora = ASMHelper.findMethod(classNode, "renderAurora");
+			MethodNode clipRenderersByFrustum = ASMHelper.findMethod(classNode, "clipRenderersByFrustum");
 			
 			{
 				InsnList insert = injectHelper.createMethodCallInject(classNode, updateRenderers, "updateRenderersCancel");
@@ -215,6 +216,7 @@ public class Transformers {
 			
 			drawSky.instructions.insert(glEnableTexture.get(0), new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "beginRenderSkyTextured", "()V"));
 			drawSky.instructions.insert(glDisableTexture.get(2), new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "beginRenderSkyBasic", "()V"));
+			drawSky.instructions.insert(glDisableTexture.get(2), new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "updateCelestialPosition", "()V"));
 			
 			MethodNode drawSelectionBox = ASMHelper.findMethod(classNode, "drawSelectionBox");
 			MethodNode drawDebugEntityOutlines = ASMHelper.findMethod(classNode, "drawDebugEntityOutlines");
@@ -230,6 +232,11 @@ public class Transformers {
 				AbstractInsnNode glPushMatrix = ASMHelper.findAllInstructions(drawSky.instructions, (n) -> FindInstruction.methodInsn(n, "glPushMatrix")).get(1);
 				AbstractInsnNode glTranslatef = ASMHelper.findInstruction(glPushMatrix, false, (n) -> FindInstruction.methodInsn(n, "glTranslatef"));
 				drawSky.instructions.insert(glTranslatef, new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "setSunPathRotation", "()V"));
+			}
+			
+			{
+				InsnList insert = createMethodCancel(classNode, clipRenderersByFrustum, "cancelFrustumCulling");
+				clipRenderersByFrustum.instructions.insertBefore(clipRenderersByFrustum.instructions.getFirst(), insert);
 			}
 		}
 	}

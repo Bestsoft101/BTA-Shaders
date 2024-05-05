@@ -10,7 +10,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import b100.natrium.VertexAttribute;
+import b100.natrium.vertex.VertexAttribute;
 
 public class Shader {
 	
