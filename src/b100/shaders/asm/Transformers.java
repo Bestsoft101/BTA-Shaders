@@ -39,9 +39,18 @@ public class Transformers {
 
 		@Override
 		public void transform(String className, ClassNode classNode) {
+			MethodNode startGame = ASMHelper.findMethod(classNode, "startGame");
 			MethodNode setRenderer = ASMHelper.findMethod(classNode, "setRenderer", null);
-			InsnList insert = injectHelper.createMethodCallInject(classNode, setRenderer, "onSetRenderer");
-			setRenderer.instructions.insertBefore(setRenderer.instructions.getFirst(), insert);
+			
+			{
+				InsnList insert = injectHelper.createMethodCallInject(classNode, setRenderer, "onSetRenderer");
+				setRenderer.instructions.insertBefore(setRenderer.instructions.getFirst(), insert);	
+			}
+			{
+				InsnList insert = new InsnList();
+				insert.add(new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "beforeGameStart", "()V"));
+				startGame.instructions.insertBefore(startGame.instructions.getFirst(), insert);
+			}
 		}
 		
 	}
@@ -86,7 +95,10 @@ public class Transformers {
 				renderWorld.instructions.insertBefore(firstSortAndRenderNode, new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "beginRenderTerrain", "()V"));
 			}
 			
-			renderWorld.instructions.insert(ASMHelper.findInstruction(renderWorld, false, (n) -> FindInstruction.methodInsn(n, "glClear")), new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "onClearWorldBuffer", "()V"));
+			{
+				AbstractInsnNode clear = ASMHelper.findInstruction(renderWorld, false, (n) -> FindInstruction.methodInsn(n, "glClear"));
+				b100.natrium.asm.Transformers.removeMethodCall(renderWorld.instructions, clear);
+			}
 			
 			{
 				AbstractInsnNode water = ASMHelper.findInstruction(renderWorld, false, (n) -> FindInstruction.ldcInsnS(n, "water"));

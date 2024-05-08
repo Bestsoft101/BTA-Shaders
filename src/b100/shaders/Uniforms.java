@@ -71,12 +71,12 @@ public class Uniforms {
 	public int eyeBrightnessBlock;
 
 	public boolean previousCameraPositionSet = false;
-	private Vector3f cameraPos = new Vector3f();
-	private Vector3f prevCameraPos = new Vector3f();
-	private Vector4f shadowLightPosition = new Vector4f();
-	private Vector4f moonPosition = new Vector4f();
-	private Vector4f sunPosition = new Vector4f();
-	private Vector3f fogColor = new Vector3f();
+	public Vector3f cameraPos = new Vector3f();
+	public Vector3f prevCameraPos = new Vector3f();
+	public Vector4f shadowLightPosition = new Vector4f();
+	public Vector4f moonPosition = new Vector4f();
+	public Vector4f sunPosition = new Vector4f();
+	public Vector3f fogColor = new Vector3f();
 	
 	private Matrix4f matrixBuffer = new Matrix4f();
 	

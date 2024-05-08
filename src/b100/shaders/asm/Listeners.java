@@ -3,6 +3,7 @@ package b100.shaders.asm;
 import static org.lwjgl.opengl.GL11.*;
 
 import b100.natrium.CustomTessellator;
+import b100.natrium.NatriumMod;
 import b100.shaders.CustomRenderer;
 import b100.shaders.ShaderRenderer;
 import b100.shaders.asm.utils.CallbackInfo;
@@ -22,6 +23,10 @@ import net.minecraft.core.entity.Entity;
 public class Listeners {
 	
 	public static final Minecraft mc = Minecraft.getMinecraft(Minecraft.class);
+	
+	public static void beforeGameStart() {
+		NatriumMod.renderListCount = 4;
+	}
 	
 	public static void onSetRenderer(Minecraft minecraft, Renderer renderer, CallbackInfo ci) {
 		ci.setCancelled(true);
@@ -91,13 +96,6 @@ public class Listeners {
 		if(mc.renderer instanceof ShaderRenderer) {
 			ShaderRenderer shadersRenderer = (ShaderRenderer) mc.renderer;
 			shadersRenderer.setSunPathRotation();
-		}
-	}
-	
-	public static void onClearWorldBuffer() {
-		if(mc.renderer instanceof CustomRenderer) {
-			CustomRenderer customRenderer = (CustomRenderer) mc.renderer;
-			customRenderer.onClearWorldBuffer();
 		}
 	}
 	

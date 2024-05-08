@@ -19,14 +19,14 @@ import java.util.Set;
 
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.opengl.Display;
+import org.lwjgl.opengl.GL30;
 import org.lwjgl.util.vector.Matrix4f;
 
 import b100.json.JsonParser;
 import b100.json.element.JsonArray;
-import b100.json.element.JsonElement;
 import b100.json.element.JsonEntry;
 import b100.json.element.JsonObject;
-import b100.natrium.TerrainRenderer;
+import b100.natrium.NatriumMod;
 import b100.natrium.vertex.VertexAttribute;
 import b100.natrium.vertex.VertexAttributeFloat;
 import net.minecraft.client.GLAllocation;
@@ -34,6 +34,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.render.LightmapHelper;
 import net.minecraft.client.render.RenderBlocks;
 import net.minecraft.client.render.Renderer;
+import net.minecraft.client.render.stitcher.TextureRegistry;
 
 public class ShaderRenderer implements Renderer, CustomRenderer {
 	
@@ -68,7 +69,7 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 	public float sunPathRotation = 0.0f;
 
 	public boolean directionalLight = true;
-
+	
 	private final Shader basicShader = new Shader();
 	private final Shader texturedShader = new Shader();
 	private final Shader skyBasicShader = new Shader();
@@ -155,7 +156,7 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 				return;
 			}else {
 				ShaderMod.log("Loading shader.json");
-				
+
 				if(root.has("directionalLight")) {
 					directionalLight = root.getBoolean("directionalLight");
 				}else {
@@ -166,7 +167,8 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 				if(shadow != null) {
 					enableShadowmap = shadow.getBoolean("enable");
 					if(enableShadowmap) {
-						shadowFramebuffer.create(0, null);	
+//						shadowFramebuffer.create(1, new TextureConfig[] {new TextureConfig()});
+						shadowFramebuffer.create(0, null);
 					}
 					if(shadow.has("resolution")) {
 						shadowMapResolution = shadow.getInt("resolution");
@@ -311,21 +313,8 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 			List<JsonEntry> entries = textureConfig.entryList();
 			for(int i=0; i < entries.size(); i++) {
 				JsonEntry entry = entries.get(i);
-				int textureID = Integer.parseInt(entry.name);
 				
-				JsonObject obj = entry.value.getAsObject();
-				if(obj.has("mipmap")) {
-					textureConfigs[textureID].enableMipmap = obj.getBoolean("mipmap");
-				}
-				JsonElement type = obj.get("type");
-				if(type != null) {
-					if(type.isNumber()) {
-						textureConfigs[i].type = type.getAsNumber().getInteger();
-					}else {
-						textureConfigs[i].type = TextureConfig.getType(type.getAsString().value);
-					}
-					ShaderMod.log("Texture " + textureID + " type: " + textureConfigs[i].type);
-				}
+				textureConfigs[Integer.parseInt(entry.name)].setup(entry.value.getAsObject());
 			}
 		}
 		
@@ -334,6 +323,7 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 	
 	public int getTextureCount(List<RenderPass> renderPasses) {
 		int textureCount = 0;
+		
 		for(int i=0; i < renderPasses.size(); i++) {
 			RenderPass rp = renderPasses.get(i);
 			if(rp.in != null) {
@@ -347,6 +337,13 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 				}
 			}
 		}
+		
+		if(renderPasses == postRenderPasses) {
+			for(int i=0; i < worldOutputTextures.length; i++) {
+				textureCount = Math.max(textureCount, worldOutputTextures[i]);
+			}
+		}
+		
 		return textureCount + 1;
 	}
 	
@@ -509,35 +506,37 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 		}
 		
 		if(enableShadowmap && isRenderingShadowmap) {
-			// Setup shadowmap camera
-			glMatrixMode(GL_PROJECTION);
-			glLoadIdentity();
-			glOrtho(-shadowDistance, shadowDistance, -shadowDistance, shadowDistance, -shadowDistance * 3.0f, shadowDistance * 3.0f);
-			glMatrixMode(GL_MODELVIEW);
-			glLoadIdentity();
-			
-			double renderPosX = mc.activeCamera.getX(partialTicks);
-			double renderPosY = mc.activeCamera.getY(partialTicks);
-			double renderPosZ = mc.activeCamera.getZ(partialTicks);
-			
-			glRotatef(-90.0f, 0.0f, 1.0f, 0.0f);
-			float sunAngle = mc.theWorld.getCelestialAngle(partialTicks);
-
-			if(sunAngle > 0.25f && sunAngle < 0.75f) {
-				sunAngle += 0.5f;
-			}
-			
-			glRotatef(-sunAngle * 360.0f - 90.0f, 0.0f, 0.0f, 1.0f);
-			glRotatef(sunPathRotation, 1.0f, 0.0f, 0.0f);
-
-			glTranslated(renderPosX % 4.0, renderPosY % 4.0, renderPosZ % 4.0);
-			
-			MatrixHelper.getMatrix(GL_PROJECTION_MATRIX, uniforms.shadowProjectionMatrix);
-			MatrixHelper.getMatrix(GL_MODELVIEW_MATRIX, uniforms.shadowModelViewMatrix);
-			
+			setupShadowmapCamera(partialTicks);
 			return true;
 		}
 		return false;
+	}
+	
+	public void setupShadowmapCamera(float partialTicks) {
+		glMatrixMode(GL_PROJECTION);
+		glLoadIdentity();
+		glOrtho(-shadowDistance, shadowDistance, -shadowDistance, shadowDistance, -shadowDistance * 3.0f, shadowDistance * 3.0f);
+		glMatrixMode(GL_MODELVIEW);
+		glLoadIdentity();
+		
+		double renderPosX = mc.activeCamera.getX(partialTicks);
+		double renderPosY = mc.activeCamera.getY(partialTicks);
+		double renderPosZ = mc.activeCamera.getZ(partialTicks);
+		
+		glRotatef(-90.0f, 0.0f, 1.0f, 0.0f);
+		float sunAngle = mc.theWorld.getCelestialAngle(partialTicks);
+
+		if(sunAngle > 0.25f && sunAngle < 0.75f) {
+			sunAngle += 0.5f;
+		}
+		
+		glRotatef(-sunAngle * 360.0f - 90.0f, 0.0f, 0.0f, 1.0f);
+		glRotatef(sunPathRotation, 1.0f, 0.0f, 0.0f);
+
+		glTranslated(renderPosX % 4.0, renderPosY % 4.0, renderPosZ % 4.0);
+		
+		MatrixHelper.getMatrix(GL_PROJECTION_MATRIX, uniforms.shadowProjectionMatrix);
+		MatrixHelper.getMatrix(GL_MODELVIEW_MATRIX, uniforms.shadowModelViewMatrix);
 	}
 	
 	public void setSunPathRotation() {
@@ -568,7 +567,12 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 	
 	@Override
 	public void beginRenderWorld(float partialTicks) {
-		if(!enableShaders || isRenderingShadowmap) {
+		if(isRenderingShadowmap) {
+			glClear(GL_DEPTH_BUFFER_BIT);
+			return;
+		}
+		if(!enableShaders) {
+			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 			return;
 		}
 		
@@ -591,10 +595,29 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 				shadowShader.bind();
 				
 				try {
-					TerrainRenderer.drawAll = true;
-					mc.worldRenderer.renderWorld(partialTicks, 0L);	
+//					NatriumMod.renderListRenderOffset = 2;
+					
+					glClear(GL_DEPTH_BUFFER_BIT);
+
+					glMatrixMode(GL_PROJECTION);
+					glLoadIdentity();
+					glMatrixMode(GL_MODELVIEW);
+					glLoadIdentity();
+					
+					setupShadowmapCamera(partialTicks);
+					
+					glEnable(GL_DEPTH_TEST);
+					glDisable(GL_CULL_FACE);
+					glEnable(GL_TEXTURE_2D);
+					TextureRegistry.blockAtlas.bindTexture();
+					
+					NatriumMod.terrainRenderer.renderTerrain(mc.activeCamera, partialTicks);
+					
+					mc.renderGlobal.renderEntities(mc.activeCamera, partialTicks);
+					
+					glEnable(GL_DEPTH_TEST);
 				}finally {
-					TerrainRenderer.drawAll = false;	
+					NatriumMod.renderListRenderOffset = 0;
 				}
 				
 				glUseProgram(0);
@@ -603,6 +626,7 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 				glViewport(0, 0, displayWidth, displayHeight);
 				
 				isRenderingShadowmap = false;
+				checkError("render shadowmap");
 			}finally {
 				mc.gameSettings.immersiveMode.value = prevImmersiveMode;
 				mc.gameSettings.clouds.value = prevClouds;
@@ -615,6 +639,38 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 			currentWidth = renderWidth;
 			currentHeight = renderHeight;
 			
+			checkError("pre clear buffers");
+			
+			glClear(GL_DEPTH_BUFFER_BIT);
+			
+			for(int i=0; i < postFramebuffer.colortex.length; i++) {
+				TextureConfig config = postFramebuffer.textureConfig[i];
+				
+				if(config.clearType == -1) {
+					continue;
+				}else if(config.clearType == 0) {
+					// Default (Fog for texture 0, otherwise black)
+					
+					if(i == 0) {
+						buffer(uniforms.fogColor.x, uniforms.fogColor.y, uniforms.fogColor.z, 1.0f);	
+					}else {
+						buffer(0.0f, 0.0f, 0.0f, 1.0f);	
+					}
+				}else if(config.clearType == 1) {
+					// Fog
+					buffer(uniforms.fogColor.x, uniforms.fogColor.y, uniforms.fogColor.z, 1.0f);
+				}else if(config.clearType == 2) {
+					// Custom Color
+					buffer(config.clearR, config.clearG, config.clearB, config.clearA);
+				}
+				
+				glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, postFramebuffer.colortex[i], 0);
+				glDrawBuffer(GL_COLOR_ATTACHMENT0);
+				glClearBuffer(GL_COLOR, 0, floatBuffer);
+			}
+			
+			checkError("clear buffers");
+			
 			intBuffer.clear();
 			
 			for(int inIndex=0; inIndex < worldOutputTextures.length; inIndex++) {
@@ -623,8 +679,11 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 			}
 			
 			intBuffer.flip();
-			
 			glDrawBuffers(intBuffer);
+			
+			checkError("clear buffers");
+		}else {
+			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		}
 
 		currentShader = null;
@@ -653,34 +712,15 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 			setupCommonUniforms(shader, 0);
 		}
 	}
-
-	@Override
-	public void onClearWorldBuffer() {
-		if(isRenderingShadowmap || !enableShaders) {
-			return;
-		}
-		
-		if(postFramebuffer.colortex != null) {
-			// TODO make color configurable
-			floatBuffer.clear();
-			floatBuffer.put(0.0f);
-			floatBuffer.put(0.0f);
-			floatBuffer.put(0.0f);
-			floatBuffer.put(0.0f);
-			floatBuffer.flip();
-			for(int i = 1; i < postFramebuffer.colortex.length; i++) {
-				glClearBuffer(GL_COLOR, i, floatBuffer);	
-			}
-		}
-	}
 	
 	@Override
 	public void beginRenderBasic() {
 		if(isRenderingShadowmap || !enableShaders) {
 			return;
 		}
-		
+
 		bindWorldShader(basicShader);
+		checkError("begin render basic");
 	}
 	
 	@Override
@@ -690,6 +730,7 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 		}
 
 		bindWorldShader(texturedShader);
+		checkError("begin render textured");
 	}
 	
 	@Override
@@ -697,8 +738,10 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 		if(isRenderingShadowmap || !enableShaders) {
 			return;
 		}
-		
+
+		checkError("pre begin render skybasic");
 		bindWorldShader(skyBasicShader);
+		checkError("begin render skybasic");
 	}
 	
 	@Override
@@ -708,6 +751,7 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 		}
 
 		bindWorldShader(skyTexturedShader);
+		checkError("begin render skytextured");
 	}
 
 	@Override
@@ -717,6 +761,7 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 		}
 
 		bindWorldShader(terrainShader);
+		checkError("begin render terrain");
 	}
 	
 	@Override
@@ -726,6 +771,7 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 		}
 
 		bindWorldShader(entitiesShader);
+		checkError("begin render entities");
 	}
 	
 	@Override
@@ -735,6 +781,7 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 		}
 
 		bindWorldShader(translucentShader);
+		checkError("begin render translucent");
 	}
 	
 	@Override
@@ -744,6 +791,7 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 		}
 
 		bindWorldShader(weatherShader);
+		checkError("begin render weather");
 	}
 	
 	@Override
@@ -753,6 +801,7 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 		}
 
 		bindWorldShader(cloudsShader);
+		checkError("begin render clouds");
 	}
 	
 	@Override
@@ -762,6 +811,7 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 		}
 
 		bindWorldShader(handShader);
+		checkError("begin render hand");
 	}
 	
 	
@@ -857,15 +907,6 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 					}
 				}
 				
-				/*
-				if(LightmapHelper.isLightmapEnabled()) {
-					glActiveTexture(GL_TEXTURE0 + textureId);
-					glBindTexture(GL_TEXTURE_2D, shadowFramebuffer.depthtex);
-					glUniform1i(renderPass.shader.getUniform("lightmap"), textureId);
-					textureId++;
-				}
-				*/
-				
 				glActiveTexture(GL_TEXTURE0);
 			}else {
 				// Shader not compiled,
@@ -912,81 +953,101 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 		glDisable(GL_LIGHTING);
 		glDisable(GL_FOG);
 		glDisable(GL_BLEND);
+		glActiveTexture(GL_TEXTURE0);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		
 		glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 		
-		/*
-		glActiveTexture(GL_TEXTURE1);
-		glClientActiveTexture(GL_TEXTURE1);
+		int w = Display.getWidth();
+		int h = Display.getHeight();
 		
-		glDisable(GL_TEXTURE_2D);
-		glBindTexture(GL_TEXTURE_2D, 0);
-		glMultiTexCoord2f(GL_TEXTURE1, 0.0f, 0.0f);
-		
-		glActiveTexture(GL_TEXTURE0);
-		glClientActiveTexture(GL_TEXTURE0);
-		*/
+		int scale = Math.max(1, Math.min(w / 320, h / 240));
 		
 		glMatrixMode(GL_PROJECTION);
 		glLoadIdentity();
-		glOrtho(0, 1, 0, 1, -1, 1);
+		glOrtho(0, w / (double) scale, h / (double) scale, 0, -1, 1);
 		glMatrixMode(GL_MODELVIEW);
 		glLoadIdentity();
 		
-		int pos = 0;
-		if(baseFramebuffer.colortex != null) {
-			showFramebufferTextures(baseFramebuffer, pos++);	
-		}
-		if(postFramebuffer.colortex != null) {
-			showFramebufferTextures(postFramebuffer, pos++);
-		}
-		if(shadowFramebuffer.colortex != null) {
-			showFramebufferTextures(shadowFramebuffer, pos++);
+		float aspectRatio = 16.0f / 9.0f;
+		
+		final int textureHeight = 56;
+		final int textureWidth = (int) (textureHeight * aspectRatio);
+		final int border = 3;
+		
+		int posX = border;
+		int posY = border;
+		
+		for(int i=0; i < 3; i++) {
+			if(i == 0) {
+				getTextures(shadowFramebuffer);	
+			}else if(i == 1) {
+				getTextures(postFramebuffer);	
+			}else if(i == 2) {
+				getTextures(baseFramebuffer);	
+			}
+			
+			while(intBuffer.position() < intBuffer.limit()) {
+				int tex = intBuffer.get();
+				
+				showFramebufferTexture(tex, posX, posY, textureWidth, textureHeight);
+				posX += textureWidth + border;
+				if(posX >= ((w / scale) - textureWidth)) {
+					posX = border;
+					if(intBuffer.position() < intBuffer.limit()) {
+						posY += textureHeight + border;	
+					}
+				}
+			}
+			posX = border;
+			posY += textureHeight + border;
+			posY += border * 2;
 		}
 	}
 	
-	public void showFramebufferTextures(Framebuffer framebuffer, int pos) {
-		// Debug
-		glPushMatrix();
-		glScaled(0.14, 0.14, 1.0);
-		glTranslated(0.1, 0.1, 0.0);
-		if(pos > 0) {
-			glTranslated(0.0, pos * 1.1, 0.0);	
+	public void getTextures(Framebuffer framebuffer) {
+		intBuffer.clear();
+		if(framebuffer.colortex != null) {
+			for(int i=0; i < framebuffer.colortex.length; i++) {
+				intBuffer.put(framebuffer.colortex[i]);
+			}	
 		}
+		intBuffer.put(framebuffer.depthtex);
+		intBuffer.flip();
+	}
+	
+	public void showFramebufferTexture(int texture, int posX, int posY, int w, int h) {
+		int x0 = posX;
+		int y0 = posY;
+		int x1 = posX + w;
+		int y1 = posY + h;
 		
-		for(int i=0; i < framebuffer.colortex.length + 1; i++) {
-			int tex = i >= framebuffer.colortex.length ? framebuffer.depthtex : framebuffer.colortex[i];
-			glBindTexture(GL_TEXTURE_2D, tex);
-
-			double pad = 0.02;
-			glDisable(GL_TEXTURE_2D);
-			glBegin(GL_QUADS);
-			glVertex2d(-pad, -pad);
-			glVertex2d(1.0 + pad, -pad);
-			glVertex2d(1.0 + pad, 1.0 + pad);
-			glVertex2d(-pad, 1.0 + pad);
-			glEnd();
-
-			glEnable(GL_TEXTURE_2D);
-			glBegin(GL_QUADS);
-			
-			glTexCoord2d(0.0, 0.0);
-			glVertex2d(0.0, 0.0);
-			
-			glTexCoord2d(1.0, 0.0);
-			glVertex2d(1.0, 0.0);
-			
-			glTexCoord2d(1.0, 1.0);
-			glVertex2d(1.0, 1.0);
-			
-			glTexCoord2d(0.0, 1.0);
-			glVertex2d(0.0, 1.0);
-			glEnd();
-			
-			glTranslated(1.1, 0.0, 0.0);
-		}
+		glBindTexture(GL_TEXTURE_2D, texture);
 		
-		glPopMatrix();
+		int pad = 1;
+		glDisable(GL_TEXTURE_2D);
+		glBegin(GL_QUADS);
+		glVertex2d(x0 - pad, y0 - pad);
+		glVertex2d(x0 - pad, y1 + pad);
+		glVertex2d(x1 + pad, y1 + pad);
+		glVertex2d(x1 + pad, y0 - pad);
+		glEnd();
+
+		glEnable(GL_TEXTURE_2D);
+		glBegin(GL_QUADS);
+		
+		glTexCoord2f(0.0f, 1.0f);
+		glVertex2f(x0, y0);
+		
+		glTexCoord2f(0.0f, 0.0f);
+		glVertex2f(x0, y1);
+		
+		glTexCoord2f(1.0f, 0.0f);
+		glVertex2f(x1, y1);
+		
+		glTexCoord2f(1.0f, 1.0f);
+		glVertex2f(x1, y0);
+		glEnd();
 	}
 	
 	private void setupCommonUniforms(Shader shader, int stage) {
@@ -1062,6 +1123,8 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 		
 		enableShadowmap = false;
 		sunPathRotation = 0.0f;
+		
+		directionalLight = true;
 	}
 	
 	static class Framebuffer {
@@ -1090,10 +1153,18 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 			glBindFramebuffer(GL_FRAMEBUFFER, id);
 			
 			for(int i=0; i < colortex.length; i++) {
-				boolean mipmapTex = textureConfig[i].enableMipmap;
+				TextureConfig config = textureConfig[i];
+				boolean mipmapTex = config.enableMipmap;
+				
+				int internalformat = config.internalformat;
+				
+				if(i == 2) {
+					internalformat = GL30.GL_RGBA32F;	
+				}
+				
 				
 				glBindTexture(GL_TEXTURE_2D, colortex[i]);
-				glTexImage2D(GL_TEXTURE_2D, 0, textureConfig[i].type, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, (ByteBuffer) null);
+				glTexImage2D(GL_TEXTURE_2D, 0, internalformat, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, (ByteBuffer) null);
 				if(mipmapTex) glGenerateMipmap(GL_TEXTURE_2D);
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
@@ -1209,6 +1280,15 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 	@Override
 	public int getRenderHeight() {
 		return postFramebuffer.height;
+	}
+	
+	public void buffer(float v0, float v1, float v2, float v3) {
+		floatBuffer.clear();
+		floatBuffer.put(v0);
+		floatBuffer.put(v1);
+		floatBuffer.put(v2);
+		floatBuffer.put(v3);
+		floatBuffer.flip();
 	}
 
 }
