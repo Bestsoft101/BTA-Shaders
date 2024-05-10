@@ -22,9 +22,11 @@ import net.minecraft.core.entity.player.EntityPlayer;
 import net.minecraft.core.enums.LightLayer;
 import net.minecraft.core.item.ItemStack;
 import net.minecraft.core.util.helper.MathHelper;
+import net.minecraft.core.util.phys.Vec3d;
 import net.minecraft.core.world.World;
 import net.minecraft.core.world.season.Season;
 import net.minecraft.core.world.season.Seasons;
+import net.minecraft.core.world.type.WorldType;
 import net.minecraft.core.world.weather.Weather;
 import net.minecraft.core.world.wind.WindManager;
 
@@ -77,6 +79,10 @@ public class Uniforms {
 	public Vector4f moonPosition = new Vector4f();
 	public Vector4f sunPosition = new Vector4f();
 	public Vector3f fogColor = new Vector3f();
+	public Vector3f skyColor = new Vector3f();
+	
+	public int worldTypeMinY;
+	public int worldTypeMaxY;
 	
 	private Matrix4f matrixBuffer = new Matrix4f();
 	
@@ -190,6 +196,15 @@ public class Uniforms {
 					}
 				}
 			}
+			
+			WorldType worldType = world.worldType;
+			worldTypeMinY = worldType.getMinY();
+			worldTypeMaxY = worldType.getMaxY();
+			
+			Vec3d skyColor = world.getSkyColor(mc.activeCamera, partialTicks);
+			this.skyColor.x = (float) skyColor.xCoord;
+			this.skyColor.y = (float) skyColor.yCoord;
+			this.skyColor.z = (float) skyColor.zCoord;
 		}else {
 			biomeTemperature = 0.7f;
 			biomeHumidity = 0.5f;
@@ -335,6 +350,10 @@ public class Uniforms {
 		uniform3f(shader.getUniform("sunPosition"), sunPosition);
 		uniform3f(shader.getUniform("moonPosition"), moonPosition);
 		uniform3f(shader.getUniform("fogColor"), fogColor);
+		uniform3f(shader.getUniform("skyColor"), skyColor);
+		
+		glUniform1i(shader.getUniform("worldTypeMinY"), worldTypeMinY);
+		glUniform1i(shader.getUniform("worldTypeMaxY"), worldTypeMaxY);
 	}
 	
 	public static void uniform3f(int location, Vector3f vec) {
