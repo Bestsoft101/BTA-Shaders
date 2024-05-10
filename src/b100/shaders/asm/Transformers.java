@@ -298,6 +298,21 @@ public class Transformers {
 		}
 	}
 	
+	class ChunkProviderStaticTransformer extends ClassTransformer {
+
+		@Override
+		public boolean accepts(String className) {
+			return className.equals("net/minecraft/client/world/chunk/provider/ChunkProviderStatic");
+		}
+
+		@Override
+		public void transform(String className, ClassNode classNode) {
+			makePublic(ASMHelper.findField(classNode, "chunks"));
+			makePublic(ASMHelper.findField(classNode, "lastQueriedChunk"));
+		}
+		
+	}
+	
 	public static void makePublic(FieldNode field) {
 		field.access = (field.access & ~Opcodes.ACC_PRIVATE) | Opcodes.ACC_PUBLIC;
 	}

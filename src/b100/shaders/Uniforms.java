@@ -335,6 +335,10 @@ public class Uniforms {
 		uniform3f(shader.getUniform("sunPosition"), sunPosition);
 		uniform3f(shader.getUniform("moonPosition"), moonPosition);
 		uniform3f(shader.getUniform("fogColor"), fogColor);
+		
+		if(renderer.lightSources.enabled) {
+			renderer.lightSources.setUniforms(shader);	
+		}
 	}
 	
 	public static void uniform3f(int location, Vector3f vec) {

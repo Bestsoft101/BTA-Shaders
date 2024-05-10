@@ -29,6 +29,7 @@ import b100.json.element.JsonObject;
 import b100.natrium.NatriumMod;
 import b100.natrium.vertex.VertexAttribute;
 import b100.natrium.vertex.VertexAttributeFloat;
+import b100.shaders.lightsources.LightSources;
 import net.minecraft.client.GLAllocation;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.render.LightmapHelper;
@@ -106,6 +107,8 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 	
 	private Shader currentShader;
 	
+	public LightSources lightSources = new LightSources(this);
+	
 	public ShaderRenderer(Minecraft minecraft) {
 		mc = minecraft;
 		uniforms = new Uniforms(this);
@@ -162,6 +165,8 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 				}else {
 					directionalLight = true;
 				}
+				
+				lightSources.setup(root);
 				
 				JsonObject shadow = root.getObject("shadow");
 				if(shadow != null) {
@@ -407,6 +412,10 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 	@Override
 	public void beginRenderGame(float partialTicks) {
 		checkError("pre begin render game");
+		
+		if(lightSources.enabled) {
+			lightSources.update();
+		}
 		
 		if(fullscreenRectVAO == 0) {
 			ShaderMod.log("Create Fullscreen VAO");
@@ -1125,6 +1134,7 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 		sunPathRotation = 0.0f;
 		
 		directionalLight = true;
+		lightSources.delete();
 	}
 	
 	static class Framebuffer {
