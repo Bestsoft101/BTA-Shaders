@@ -298,6 +298,45 @@ public class Transformers {
 		}
 	}
 	
+	class OptionsPagesTransformer extends ClassTransformer {
+
+		@Override
+		public boolean accepts(String className) {
+			return className.equals("net/minecraft/client/gui/options/data/OptionsPages");
+		}
+
+		@Override
+		public void transform(String className, ClassNode classNode) {
+			MethodNode staticInit = ASMHelper.findMethod(classNode, "<clinit>");
+			ASMHelper.findAllInstructions(staticInit, (n) -> n.getOpcode() == Opcodes.RETURN).forEach((returnNode) -> {
+				staticInit.instructions.insertBefore(returnNode, new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "onInitGui", "()V"));	
+			});;
+		}
+		
+	}
+	
+	class GuiOptionsTransformer extends ClassTransformer {
+
+		@Override
+		public boolean accepts(String className) {
+			return className.equals("net/minecraft/client/gui/options/GuiOptions");
+		}
+
+		@Override
+		public void transform(String className, ClassNode classNode) {
+			makePublic(ASMHelper.findField(classNode, "selectedPage"));
+			
+			MethodNode mouseClicked = ASMHelper.findMethod(classNode, "mouseClicked");
+			
+			AbstractInsnNode refreshIfReady = ASMHelper.findInstruction(mouseClicked, false, (n) -> FindInstruction.methodInsn(n, "refreshIfReady"));
+			InsnList insert = new InsnList();
+			insert.add(new VarInsnNode(Opcodes.ALOAD, 0));
+			insert.add(new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "onClickOptionsPage", "(Lnet/minecraft/client/gui/options/GuiOptions;)V"));
+			mouseClicked.instructions.insert(refreshIfReady, insert);
+		}
+		
+	}
+	
 	public static void makePublic(FieldNode field) {
 		field.access = (field.access & ~Opcodes.ACC_PRIVATE) | Opcodes.ACC_PUBLIC;
 	}

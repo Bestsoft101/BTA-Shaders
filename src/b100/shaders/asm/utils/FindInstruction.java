@@ -22,7 +22,7 @@ public class FindInstruction {
 	public static boolean methodInsn(AbstractInsnNode node, String name) {
 		if(node instanceof MethodInsnNode) {
 			MethodInsnNode node1 = (MethodInsnNode) node;
-			return node1.name.equals(name);
+			return name == null || node1.name.equals(name);
 		}
 		return false;
 	}
@@ -33,7 +33,7 @@ public class FindInstruction {
 	public static boolean methodInsn(AbstractInsnNode node, String name, String desc) {
 		if(node instanceof MethodInsnNode) {
 			MethodInsnNode node1 = (MethodInsnNode) node;
-			return node1.name.equals(name) && node1.desc.equals(desc);
+			return (name == null || node1.name.equals(name)) && (desc == null || node1.desc.equals(desc));
 		}
 		return false;
 	}
@@ -55,7 +55,7 @@ public class FindInstruction {
 	public static boolean fieldInsn(AbstractInsnNode node, String name) {
 		if(node instanceof FieldInsnNode) {
 			FieldInsnNode node1 = (FieldInsnNode) node;
-			return node1.name.equals(name);
+			return name == null || node1.name.equals(name);
 		}
 		return false;
 	}
@@ -66,7 +66,7 @@ public class FindInstruction {
 	public static boolean fieldInsn(AbstractInsnNode node, String owner, String name) {
 		if(node instanceof FieldInsnNode) {
 			FieldInsnNode node1 = (FieldInsnNode) node;
-			return node1.owner.equals(owner) && node1.name.equals(name);
+			return (owner == null || node1.owner.equals(owner)) && (name == null || node1.name.equals(name));
 		}
 		return false;
 	}
@@ -77,7 +77,7 @@ public class FindInstruction {
 	public static boolean fieldInsn(AbstractInsnNode node, String owner, String name, String desc) {
 		if(node instanceof FieldInsnNode) {
 			FieldInsnNode node1 = (FieldInsnNode) node;
-			return node1.owner.equals(owner) && node1.name.equals(name) && node1.desc.equals(desc);
+			return (owner == null || node1.owner.equals(owner)) && (name == null || node1.name.equals(name)) && (desc == null || node1.desc.equals(desc));
 		}
 		return false;
 	}

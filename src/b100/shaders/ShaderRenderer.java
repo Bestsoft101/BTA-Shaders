@@ -106,6 +106,8 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 	
 	private Shader currentShader;
 	
+	public boolean shaderPackChanged = false;
+	
 	public ShaderRenderer(Minecraft minecraft) {
 		mc = minecraft;
 		uniforms = new Uniforms(this);
@@ -113,7 +115,7 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 		ShaderMod.log("Shader Directory: " + ShaderMod.getShaderDirectory());
 	}
 	
-	private void setup() {
+	public void setup() {
 		boolean prevDirectionalLight = directionalLight;
 		
 		isSetup = true;
@@ -145,107 +147,111 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 	
 	public void loadRenderPassConfig() {
 		try {
-			File shaderJson = new File(ShaderMod.getCurrentShaderPackDirectory(), "shader.json");
+			File shaderPackDirectory = ShaderMod.getCurrentShaderPackDirectory();
+			if(shaderPackDirectory == null) {
+				throw new NullPointerException("No shader pack selected!");
+			}
+			
+			File shaderJson = new File(shaderPackDirectory, "shader.json");
+			if(!shaderJson.exists()) {
+				throw new NullPointerException("Missing shader json!");
+			}
+			
 			JsonObject root = JsonParser.instance.parseFileContent(shaderJson);
-
 			if(root == null) {
-				ShaderMod.log("Missing shader.json!");
-				
-				// TODO Load internal default config
-				
-				return;
+				throw new NullPointerException("Json is null!");
+			}
+			
+			ShaderMod.log("Loading shader.json");
+			
+			if(root.has("directionalLight")) {
+				directionalLight = root.getBoolean("directionalLight");
 			}else {
-				ShaderMod.log("Loading shader.json");
-
-				if(root.has("directionalLight")) {
-					directionalLight = root.getBoolean("directionalLight");
+				directionalLight = true;
+			}
+			
+			JsonObject shadow = root.getObject("shadow");
+			if(shadow != null) {
+				enableShadowmap = shadow.getBoolean("enable");
+				if(enableShadowmap) {
+//					shadowFramebuffer.create(1, new TextureConfig[] {new TextureConfig()});
+					shadowFramebuffer.create(0, null);
+				}
+				if(shadow.has("resolution")) {
+					shadowMapResolution = shadow.getInt("resolution");
 				}else {
-					directionalLight = true;
+					shadowMapResolution = 1024;
 				}
-				
-				JsonObject shadow = root.getObject("shadow");
-				if(shadow != null) {
-					enableShadowmap = shadow.getBoolean("enable");
-					if(enableShadowmap) {
-//						shadowFramebuffer.create(1, new TextureConfig[] {new TextureConfig()});
-						shadowFramebuffer.create(0, null);
-					}
-					if(shadow.has("resolution")) {
-						shadowMapResolution = shadow.getInt("resolution");
-					}else {
-						shadowMapResolution = 1024;
-					}
-					if(shadow.has("distance")) {
-						shadowDistance = shadow.getFloat("distance");
-					}else {
-						shadowDistance = 64.0f;
-					}
-					if(shadow.has("shader")) {
-						shadowShader.setupShader(shadow.getString("shader"));
-					}
-					if(shadow.has("sunPathRotation")) {
-						sunPathRotation = shadow.getFloat("sunPathRotation");
-					}
+				if(shadow.has("distance")) {
+					shadowDistance = shadow.getFloat("distance");
+				}else {
+					shadowDistance = 64.0f;
 				}
+				if(shadow.has("shader")) {
+					shadowShader.setupShader(shadow.getString("shader"));
+				}
+				if(shadow.has("sunPathRotation")) {
+					sunPathRotation = shadow.getFloat("sunPathRotation");
+				}
+			}
+			
+			JsonObject world = root.getObject("world");
+			if(world != null) {
+				List<VertexAttribute> vertexAttributes = new ArrayList<>();
+				vertexAttributes.add(attributeID);
+				vertexAttributes.add(attributeTopVertex);
 				
-				JsonObject world = root.getObject("world");
-				if(world != null) {
-					List<VertexAttribute> vertexAttributes = new ArrayList<>();
-					vertexAttributes.add(attributeID);
-					vertexAttributes.add(attributeTopVertex);
-					
-					if(world.has("basic")) {
-						basicShader.setupShader(world.getString("basic"));
-					}
-					if(world.has("textured")) {
-						texturedShader.setupShader(world.getString("textured"));
-					}
-					if(world.has("skybasic")) {
-						skyBasicShader.setupShader(world.getString("skybasic"));
-					}
-					if(world.has("skytextured")) {
-						skyTexturedShader.setupShader(world.getString("skytextured"));
-					}
-					if(world.has("terrain")) {
-						terrainShader.setupShader(world.getString("terrain"), vertexAttributes);
-					}
-					if(world.has("entities")) {
-						entitiesShader.setupShader(world.getString("entities"));
-					}
-					if(world.has("translucent")) {
-						translucentShader.setupShader(world.getString("translucent"), vertexAttributes);
-					}
-					if(world.has("weather")) {
-						weatherShader.setupShader(world.getString("weather"));
-					}
-					if(world.has("clouds")) {
-						cloudsShader.setupShader(world.getString("clouds"));
-					}
-					if(world.has("hand")) {
-						handShader.setupShader(world.getString("hand"));
-					}
-					if(world.has("out")) {
-						worldOutputTextures = parseIntArray(world.getArray("out"));
-					}else {
-						worldOutputTextures = new int[] {0};
-					}
+				if(world.has("basic")) {
+					basicShader.setupShader(world.getString("basic"));
+				}
+				if(world.has("textured")) {
+					texturedShader.setupShader(world.getString("textured"));
+				}
+				if(world.has("skybasic")) {
+					skyBasicShader.setupShader(world.getString("skybasic"));
+				}
+				if(world.has("skytextured")) {
+					skyTexturedShader.setupShader(world.getString("skytextured"));
+				}
+				if(world.has("terrain")) {
+					terrainShader.setupShader(world.getString("terrain"), vertexAttributes);
+				}
+				if(world.has("entities")) {
+					entitiesShader.setupShader(world.getString("entities"));
+				}
+				if(world.has("translucent")) {
+					translucentShader.setupShader(world.getString("translucent"), vertexAttributes);
+				}
+				if(world.has("weather")) {
+					weatherShader.setupShader(world.getString("weather"));
+				}
+				if(world.has("clouds")) {
+					cloudsShader.setupShader(world.getString("clouds"));
+				}
+				if(world.has("hand")) {
+					handShader.setupShader(world.getString("hand"));
+				}
+				if(world.has("out")) {
+					worldOutputTextures = parseIntArray(world.getArray("out"));
 				}else {
 					worldOutputTextures = new int[] {0};
 				}
-				
-				JsonObject base = root.getObject("base");
-				JsonObject post = root.getObject("post");
-				
-				if(base != null) {
-					parseRenderConfig(base, baseRenderPasses, baseFramebuffer);
-				}else {
-					baseFramebuffer.create(0, new TextureConfig[] {new TextureConfig()});
-				}
-				if(post != null) {
-					parseRenderConfig(post, postRenderPasses, postFramebuffer);
-				}else {
-					postFramebuffer.create(0, new TextureConfig[] {new TextureConfig()});
-				}
+			}else {
+				worldOutputTextures = new int[] {0};
+			}
+			
+			JsonObject base = root.getObject("base");
+			JsonObject post = root.getObject("post");
+			
+			if(base != null) {
+				parseRenderConfig(base, baseRenderPasses, baseFramebuffer);
+			}else {
+				baseFramebuffer.create(0, new TextureConfig[] {new TextureConfig()});
+			}
+			if(post != null) {
+				parseRenderConfig(post, postRenderPasses, postFramebuffer);
+			}else {
+				postFramebuffer.create(0, new TextureConfig[] {new TextureConfig()});
 			}
 			
 			ShaderMod.log("Render Passes: " + baseRenderPasses.size() + " Base, " + postRenderPasses.size() + " Post");
@@ -256,7 +262,8 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 			e.printStackTrace();
 			
 			delete();
-			
+
+			// TODO Load internal default config
 			baseFramebuffer.create(1, new TextureConfig[] {new TextureConfig()});
 			postFramebuffer.create(1, new TextureConfig[] {new TextureConfig()});
 		}
@@ -439,7 +446,8 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 			checkError("vao setup");
 		}
 		
-		if(!isSetup) {
+		if(!isSetup || shaderPackChanged) {
+			shaderPackChanged = false;
 			setup();
 		}
 		
@@ -1161,7 +1169,6 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 				if(i == 2) {
 					internalformat = GL30.GL_RGBA32F;	
 				}
-				
 				
 				glBindTexture(GL_TEXTURE_2D, colortex[i]);
 				glTexImage2D(GL_TEXTURE_2D, 0, internalformat, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, (ByteBuffer) null);

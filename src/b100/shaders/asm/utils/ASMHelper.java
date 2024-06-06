@@ -252,6 +252,10 @@ public abstract class ASMHelper {
 		
 		return foundMethods.get(0);
 	}
+
+	public static List<AbstractInsnNode> findAllInstructions(MethodNode method, Condition<AbstractInsnNode> condition) {
+		return findAllInstructions(method.instructions, condition);
+	}
 	
 	public static List<AbstractInsnNode> findAllInstructions(InsnList instructions, Condition<AbstractInsnNode> condition) {
 		List<AbstractInsnNode> list = new ArrayList<AbstractInsnNode>();

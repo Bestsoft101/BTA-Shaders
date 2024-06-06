@@ -1,13 +1,20 @@
 package b100.shaders.asm;
 
+import static b100.shaders.ShaderMod.*;
 import static org.lwjgl.opengl.GL11.*;
 
 import b100.natrium.CustomTessellator;
 import b100.natrium.NatriumMod;
 import b100.shaders.CustomRenderer;
+import b100.shaders.ShaderMod;
 import b100.shaders.ShaderRenderer;
 import b100.shaders.asm.utils.CallbackInfo;
+import b100.shaders.gui.GuiShaderMenu;
+import b100.shaders.gui.GuiUtils;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.options.GuiOptions;
+import net.minecraft.client.gui.options.data.OptionsPage;
+import net.minecraft.client.gui.options.data.OptionsPages;
 import net.minecraft.client.render.ChunkRenderer;
 import net.minecraft.client.render.RenderGlobal;
 import net.minecraft.client.render.Renderer;
@@ -19,13 +26,27 @@ import net.minecraft.client.render.entity.EntityRenderer;
 import net.minecraft.client.render.tessellator.Tessellator;
 import net.minecraft.core.block.Block;
 import net.minecraft.core.entity.Entity;
+import net.minecraft.core.item.Item;
+import net.minecraft.core.item.ItemStack;
 
 public class Listeners {
 	
-	public static final Minecraft mc = Minecraft.getMinecraft(Minecraft.class);
-	
 	public static void beforeGameStart() {
 		NatriumMod.renderListCount = 4;
+		
+		GuiUtils.instance = new GuiUtils(mc);
+	}
+	
+	public static void onInitGui() {
+		ShaderMod.optionsPage = new OptionsPage("Shaders", new ItemStack(Item.wandMonsterSpawner));
+
+		OptionsPages.register(ShaderMod.optionsPage);
+	}
+	
+	public static void onClickOptionsPage(GuiOptions guiOptions) {
+		if(guiOptions.selectedPage == ShaderMod.optionsPage) {
+			GuiUtils.instance.displayGui(new GuiShaderMenu(null));
+		}
 	}
 	
 	public static void onSetRenderer(Minecraft minecraft, Renderer renderer, CallbackInfo ci) {
