@@ -337,6 +337,20 @@ public class Transformers {
 		
 	}
 	
+	class GuiScreenTransformer extends ClassTransformer {
+
+		@Override
+		public boolean accepts(String className) {
+			return className.equals("net/minecraft/client/gui/GuiScreen");
+		}
+
+		@Override
+		public void transform(String className, ClassNode classNode) {
+			classNode.interfaces.add("b100/shaders/gui/IGuiScreen");
+		}
+		
+	}
+	
 	public static void makePublic(FieldNode field) {
 		field.access = (field.access & ~Opcodes.ACC_PRIVATE) | Opcodes.ACC_PUBLIC;
 	}

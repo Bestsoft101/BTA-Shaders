@@ -88,13 +88,17 @@ public class GuiUtils {
 		return mc.currentScreen instanceof GuiWrapper;
 	}
 
-	public void displayGui(GuiScreen screen) {
-		if(screen != null) {
-			GuiWrapper wrapper = new GuiWrapper(screen);
+	public void displayGui(IGuiScreen screen) {
+		if(screen == null) {
+			mc.displayGuiScreen(null);
+		}else if(screen instanceof GuiScreen) {
+			GuiWrapper wrapper = new GuiWrapper((GuiScreen) screen);
 			mc.displayGuiScreen(wrapper);
 			wrapper.onOpened();
+		}else if(screen instanceof net.minecraft.client.gui.GuiScreen) {
+			mc.displayGuiScreen((net.minecraft.client.gui.GuiScreen) screen);
 		}else {
-			mc.displayGuiScreen(null);
+			throw new RuntimeException("Don't know how to open GUI screen of type " + screen.getClass().getName());
 		}
 	}
 

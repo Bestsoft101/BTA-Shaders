@@ -30,8 +30,9 @@ public class GuiShaderMenu extends GuiScreen implements ActionListener {
 	
 	private long sinceLastUpdate = 0;
 	
-	public GuiShaderMenu(GuiScreen parentScreen) {
+	public GuiShaderMenu(IGuiScreen parentScreen) {
 		super(parentScreen);
+		System.out.println("open shader menu, parent screen: " + parentScreen);
 	}
 	
 	@Override
@@ -184,7 +185,7 @@ public class GuiShaderMenu extends GuiScreen implements ActionListener {
 			Utils.openDirectory(ShaderMod.getShaderPackDirectory());
 		}
 		if(source == buttonDone) {
-			close();
+			back();
 		}
 	}
 

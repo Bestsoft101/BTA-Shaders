@@ -2,9 +2,9 @@ package b100.shaders.gui;
 
 import org.lwjgl.input.Keyboard;
 
-public abstract class GuiScreen extends GuiContainer {
+public abstract class GuiScreen extends GuiContainer implements IGuiScreen {
 	
-	private GuiScreen parentScreen;
+	private IGuiScreen parentScreen;
 	
 	public int width;
 	public int height;
@@ -14,7 +14,7 @@ public abstract class GuiScreen extends GuiContainer {
 	
 	private boolean initialized = false;
 	
-	public GuiScreen(GuiScreen parentScreen) {
+	public GuiScreen(IGuiScreen parentScreen) {
 		this.parentScreen = parentScreen;
 	}
 	

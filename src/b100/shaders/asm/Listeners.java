@@ -45,7 +45,8 @@ public class Listeners {
 	
 	public static void onClickOptionsPage(GuiOptions guiOptions) {
 		if(guiOptions.selectedPage == ShaderMod.optionsPage) {
-			GuiUtils.instance.displayGui(new GuiShaderMenu(null));
+			guiOptions.selectedPage = OptionsPages.GENERAL;
+			GuiUtils.instance.displayGui(new GuiShaderMenu(mc.currentScreen));
 		}
 	}
 	
