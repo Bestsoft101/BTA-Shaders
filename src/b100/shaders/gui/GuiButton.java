@@ -35,14 +35,18 @@ public class GuiButton extends GuiElement {
 	@Override
 	public void draw(float partialTicks) {
 		int v;
+		int color;
 		if(enabled) {
 			if(screen.getClickElementAt(screen.cursorX, screen.cursorY) == this) {
 				v = V_BUTTON_HOVER;
+				color = TEXT_COLOR_BUTTON_HOVER;
 			}else {
 				v = V_BUTTON_NORMAL;
+				color = TEXT_COLOR_BUTTON_DEFAULT;
 			}
 		}else {
 			v = V_BUTTON_DISABLED;
+			color = TEXT_COLOR_BUTTON_DISABLED;
 		}
 		
 		int w0 = width / 2;
@@ -53,7 +57,7 @@ public class GuiButton extends GuiElement {
 		utils.drawTexturedRectangle(posX + w0, posY, w1, height, 200 - w0, v);
 		
 		int textWidth = utils.getStringWidth(text);
-		utils.drawString(text, posX + (width - textWidth) / 2, posY + height / 2 - 4, 0xFFFFFFFF);
+		utils.drawString(text, posX + (width - textWidth) / 2, posY + height / 2 - 4, color);
 	}
 	
 	@Override

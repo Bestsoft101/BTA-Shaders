@@ -12,6 +12,10 @@ public abstract class Gui {
 	public static final int V_BUTTON_NORMAL = 66;
 	public static final int V_BUTTON_HOVER = 86;
 	
+	public static final int TEXT_COLOR_BUTTON_DISABLED = 0xFFA0A0A0;
+	public static final int TEXT_COLOR_BUTTON_DEFAULT = 0xFFE0E0E0;
+	public static final int TEXT_COLOR_BUTTON_HOVER = 0xFFFFFFA0;
+	
 	public GuiUtils utils = GuiUtils.instance;
 	public Minecraft mc = ShaderMod.mc;
 	
