@@ -41,6 +41,7 @@ public class Transformers {
 		public void transform(String className, ClassNode classNode) {
 			MethodNode startGame = ASMHelper.findMethod(classNode, "startGame");
 			MethodNode setRenderer = ASMHelper.findMethod(classNode, "setRenderer", null);
+			MethodNode checkBoundInputs = ASMHelper.findMethod(classNode, "checkBoundInputs");
 			
 			{
 				InsnList insert = injectHelper.createMethodCallInject(classNode, setRenderer, "onSetRenderer");
@@ -50,6 +51,10 @@ public class Transformers {
 				InsnList insert = new InsnList();
 				insert.add(new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "beforeGameStart", "()V"));
 				startGame.instructions.insertBefore(startGame.instructions.getFirst(), insert);
+			}
+			{
+				InsnList insert = injectHelper.createMethodCallInject(classNode, checkBoundInputs, "checkBoundInputs");
+				checkBoundInputs.instructions.insertBefore(checkBoundInputs.instructions.getFirst(), insert);	
 			}
 		}
 		
@@ -349,6 +354,28 @@ public class Transformers {
 			classNode.interfaces.add("b100/shaders/gui/IGuiScreen");
 		}
 		
+	}
+	
+	class I18nTransformer extends ClassTransformer {
+
+		@Override
+		public boolean accepts(String className) {
+			return className.equals("net/minecraft/core/lang/I18n");
+		}
+
+		@Override
+		public void transform(String className, ClassNode classNode) {
+			MethodNode reload = ASMHelper.findMethod(classNode, "reload", "(Ljava/lang/String;Z)V");
+			
+			AbstractInsnNode returnNode = ASMHelper.findInstruction(reload, true, (n) -> n.getOpcode() == Opcodes.RETURN);
+			
+			InsnList insert = new InsnList();
+			insert.add(new VarInsnNode(Opcodes.ALOAD, 0));
+			insert.add(new VarInsnNode(Opcodes.ALOAD, 1));
+			insert.add(new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "onReloadLanguages", "(Lnet/minecraft/core/lang/I18n;Ljava/lang/String;)V"));
+			
+			reload.instructions.insertBefore(returnNode, insert);
+		}
 	}
 	
 	public static void makePublic(FieldNode field) {

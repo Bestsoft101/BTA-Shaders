@@ -6,6 +6,7 @@ import static org.lwjgl.opengl.GL11.*;
 import b100.natrium.CustomTessellator;
 import b100.natrium.NatriumMod;
 import b100.shaders.CustomRenderer;
+import b100.shaders.LanguageHelper;
 import b100.shaders.ShaderMod;
 import b100.shaders.ShaderRenderer;
 import b100.shaders.asm.utils.CallbackInfo;
@@ -13,8 +14,11 @@ import b100.shaders.gui.GuiShaderMenu;
 import b100.shaders.gui.GuiUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.options.GuiOptions;
+import net.minecraft.client.gui.options.components.KeyBindingComponent;
+import net.minecraft.client.gui.options.components.OptionsCategory;
 import net.minecraft.client.gui.options.data.OptionsPage;
 import net.minecraft.client.gui.options.data.OptionsPages;
+import net.minecraft.client.option.InputDevice;
 import net.minecraft.client.render.ChunkRenderer;
 import net.minecraft.client.render.RenderGlobal;
 import net.minecraft.client.render.Renderer;
@@ -28,6 +32,7 @@ import net.minecraft.core.block.Block;
 import net.minecraft.core.entity.Entity;
 import net.minecraft.core.item.Item;
 import net.minecraft.core.item.ItemStack;
+import net.minecraft.core.lang.I18n;
 
 public class Listeners {
 	
@@ -41,6 +46,13 @@ public class Listeners {
 		ShaderMod.optionsPage = new OptionsPage("Shaders", new ItemStack(Item.wandMonsterSpawner));
 
 		OptionsPages.register(ShaderMod.optionsPage);
+		
+		OptionsCategory shaderControls = new OptionsCategory("category.controls.shaders");
+		shaderControls.withComponent(new KeyBindingComponent(ShaderMod.config.keyOpenShaderMenu.keyBinding));
+		shaderControls.withComponent(new KeyBindingComponent(ShaderMod.config.keyReloadShaders.keyBinding));
+		shaderControls.withComponent(new KeyBindingComponent(ShaderMod.config.keyToggleShaders.keyBinding));
+		shaderControls.withComponent(new KeyBindingComponent(ShaderMod.config.keyShowTextures.keyBinding));
+		OptionsPages.CONTROLS.withComponent(shaderControls);
 	}
 	
 	public static void onClickOptionsPage(GuiOptions guiOptions) {
@@ -257,6 +269,17 @@ public class Listeners {
 			return shaderRenderer.isRenderingShadowmap;
 		}
 		return false;
+	}
+	
+	public static void onReloadLanguages(I18n stringTranslate, String languageName) {
+		LanguageHelper.onReloadLanguages(stringTranslate, languageName);
+	}
+	
+	public static void checkBoundInputs(Minecraft minecraft, InputDevice inputDevice, CallbackInfo ci) {
+		if(ShaderMod.checkBoundInputs(inputDevice)) {
+			ci.setCancelled(true);
+			ci.setReturnValue(true);
+		}
 	}
 
 }

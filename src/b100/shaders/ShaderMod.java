@@ -2,41 +2,61 @@ package b100.shaders;
 
 import java.io.File;
 
+import b100.shaders.config.ShaderModConfig;
+import b100.shaders.gui.GuiShaderMenu;
+import b100.shaders.gui.GuiUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.options.data.OptionsPage;
-import net.minecraft.core.Global;
+import net.minecraft.client.option.InputDevice;
 
 public class ShaderMod {
+	
+	public static Minecraft mc;
+	
+	public static ShaderModConfig config;
 	
 	private static File minecraftDirectory;
 	private static File shaderDirectory;
 	private static File shaderPackDirectory;
+	private static File configFile;
 	
 	public static OptionsPage optionsPage;
-	
-	public static final Minecraft mc = Minecraft.getMinecraft(Minecraft.class);
 	
 	static {
 		grabInstanceAndDirectory();
 	}
 	
 	private static void grabInstanceAndDirectory() {
-		minecraftDirectory = Global.accessor.getMinecraftDir();
+		mc = Minecraft.getMinecraft(Minecraft.class);
+		
+		minecraftDirectory = mc.getMinecraftDir();
 		
 		shaderPackDirectory = new File(minecraftDirectory, "shaderpacks");
 		shaderPackDirectory.mkdirs();
+
+		File configDirectory = new File(minecraftDirectory, "config");
+		configDirectory.mkdirs();
+
+		configFile = new File(configDirectory, "shaders.cfg");
+		
+		config = new ShaderModConfig(mc);
+		config.load();
 	}
 	
 	public static File getShaderDirectory() {
 		return shaderDirectory;
 	}
 	
-	public static File getCurrentShaderPackDirectory() {
+	public static File getCurrentShaderPackFile() {
 		return shaderDirectory;
 	}
 	
 	public static File getShaderPackDirectory() {
 		return shaderPackDirectory;
+	}
+	
+	public static File getConfigFile() {
+		return configFile;
 	}
 	
 	public static boolean isShaderPack(File file) {
@@ -71,11 +91,48 @@ public class ShaderMod {
 		System.out.print("[ShaderMod] " + string + "\n");
 	}
 	
+	public static void logAndDisplay(String string) {
+		log(string);
+		if(mc.ingameGUI != null && mc.ingameGUI.guiHeldItemTooltip != null) {
+			mc.ingameGUI.guiHeldItemTooltip.setString(string);	
+		}
+	}
+	
 	public static void setShaderpack(File file) {
+		log("Set Shaderpack: " + (file != null ? file.getName() : "(None)"));
 		shaderDirectory = file;
 		
-		ShaderRenderer shaderRenderer = (ShaderRenderer) mc.renderer;
-		shaderRenderer.shaderPackChanged = true;
+		if(mc.renderer != null) {
+			ShaderRenderer shaderRenderer = (ShaderRenderer) mc.renderer;
+			shaderRenderer.shaderPackChanged = true;
+		}
+	}
+	
+	public static boolean checkBoundInputs(InputDevice device) {
+		if(config.keyOpenShaderMenu.keyBinding.isPressEvent(device)) {
+			GuiUtils.instance.displayGui(new GuiShaderMenu(null));
+			return true;
+		}
+		if(config.keyReloadShaders.keyBinding.isPressEvent(device)) {
+			ShaderRenderer shaderRenderer = (ShaderRenderer) mc.renderer;
+			shaderRenderer.shaderPackChanged = true;
+			logAndDisplay("Reloading shaders...");
+			return true;
+		}
+		if(config.keyToggleShaders.keyBinding.isPressEvent(device)) {
+			ShaderRenderer shaderRenderer = (ShaderRenderer) mc.renderer;
+			shaderRenderer.enableShaders = !shaderRenderer.enableShaders;
+			logAndDisplay("Shaders: " + (shaderRenderer.enableShaders ? "On" : "Off"));
+			return true;
+		}
+		if(config.keyShowTextures.keyBinding.isPressEvent(device)) {
+			ShaderRenderer shaderRenderer = (ShaderRenderer) mc.renderer;
+			if(shaderRenderer.enableShaders) {
+				shaderRenderer.showTextures = !shaderRenderer.showTextures;
+				return true;
+			}
+		}
+		return false;
 	}
 
 }

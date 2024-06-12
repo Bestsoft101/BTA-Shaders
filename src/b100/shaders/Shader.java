@@ -95,12 +95,12 @@ public class Shader {
 	}
 	
 	public String getShaderSource(String name) {
-		File shaderpackDirectory = ShaderMod.getCurrentShaderPackDirectory();
-		if(shaderpackDirectory == null) {
+		File shaderpackFile = ShaderMod.getCurrentShaderPackFile();
+		if(shaderpackFile == null) {
 			return null;
 		}
 		
-		File shaderFile = new File(shaderpackDirectory, name);
+		File shaderFile = new File(shaderpackFile, name);
 		if(!shaderFile.exists()) {
 			return null;
 		}

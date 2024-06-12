@@ -32,7 +32,6 @@ public class GuiShaderMenu extends GuiScreen implements ActionListener {
 	
 	public GuiShaderMenu(IGuiScreen parentScreen) {
 		super(parentScreen);
-		System.out.println("open shader menu, parent screen: " + parentScreen);
 	}
 	
 	@Override
@@ -153,6 +152,13 @@ public class GuiShaderMenu extends GuiScreen implements ActionListener {
 		super.onResize();
 	}
 	
+	@Override
+	public void onGuiClosed() {
+		super.onGuiClosed();
+		
+		ShaderMod.config.save();
+	}
+	
 	public static class ShaderPackButton extends GuiFocusButton {
 
 		public final File file;
@@ -172,7 +178,7 @@ public class GuiShaderMenu extends GuiScreen implements ActionListener {
 		public void onFocusChanged() {
 			super.onFocusChanged();
 			
-			if(isFocused()) {
+			if(isFocused() && screen.isInitialized()) {
 				ShaderMod.setShaderpack(file);
 			}
 		}

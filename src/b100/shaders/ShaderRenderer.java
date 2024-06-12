@@ -17,7 +17,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-import org.lwjgl.input.Keyboard;
 import org.lwjgl.opengl.Display;
 import org.lwjgl.opengl.GL30;
 import org.lwjgl.util.vector.Matrix4f;
@@ -93,12 +92,8 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 	private IntBuffer intBuffer = byteBuffer.asIntBuffer();
 	private FloatBuffer floatBuffer = byteBuffer.asFloatBuffer();
 
-	private boolean enableShaders = true;
-	private boolean showTextures = false;
-	
-	private boolean pressedReloadLast = false;
-	private boolean pressedToggleLast = false;
-	private boolean pressedShowTexturesLast = false;
+	public boolean enableShaders = true;
+	public boolean showTextures = false;
 	
 	public final Uniforms uniforms;
 	
@@ -111,8 +106,6 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 	public ShaderRenderer(Minecraft minecraft) {
 		mc = minecraft;
 		uniforms = new Uniforms(this);
-		
-		ShaderMod.log("Shader Directory: " + ShaderMod.getShaderDirectory());
 	}
 	
 	public void setup() {
@@ -147,12 +140,14 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 	
 	public void loadRenderPassConfig() {
 		try {
-			File shaderPackDirectory = ShaderMod.getCurrentShaderPackDirectory();
-			if(shaderPackDirectory == null) {
+			File shaderPackFile = ShaderMod.getCurrentShaderPackFile();
+			if(shaderPackFile == null) {
 				throw new NullPointerException("No shader pack selected!");
 			}
 			
-			File shaderJson = new File(shaderPackDirectory, "shader.json");
+			ShaderMod.log("Loading Shader: " + shaderPackFile.getName());
+			
+			File shaderJson = new File(shaderPackFile, "shader.json");
 			if(!shaderJson.exists()) {
 				throw new NullPointerException("Missing shader json!");
 			}
@@ -161,8 +156,6 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 			if(root == null) {
 				throw new NullPointerException("Json is null!");
 			}
-			
-			ShaderMod.log("Loading shader.json");
 			
 			if(root.has("directionalLight")) {
 				directionalLight = root.getBoolean("directionalLight");
@@ -448,6 +441,7 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 		
 		if(!isSetup || shaderPackChanged) {
 			shaderPackChanged = false;
+			enableShaders = true;
 			setup();
 		}
 		
@@ -455,35 +449,6 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 		
 		if(displayWidth != baseFramebuffer.width || displayHeight != baseFramebuffer.height || renderWidth != postFramebuffer.width || renderHeight != postFramebuffer.height) {
 			setupFramebuffers();
-		}
-		
-		// Handle input
-		boolean pressedReload = Keyboard.isKeyDown(Keyboard.KEY_F7);
-		if(pressedReload != pressedReloadLast) {
-			pressedReloadLast = pressedReload;
-			if(pressedReload) {
-				ShaderMod.log("Reloading Shaders!");
-				setup();
-				enableShaders = true;
-			}
-		}
-		
-		boolean pressedToggle = Keyboard.isKeyDown(Keyboard.KEY_F6);
-		if(pressedToggle != pressedToggleLast) {
-			pressedToggleLast = pressedToggle;
-			if(pressedToggle) {
-				enableShaders = !enableShaders;
-				ShaderMod.log("Enable Shaders: " + enableShaders);
-			}
-		}
-		
-		boolean pressedShowTextures = Keyboard.isKeyDown(Keyboard.KEY_F8);
-		if(pressedShowTextures != pressedShowTexturesLast) {
-			pressedShowTexturesLast = pressedShowTextures;
-			if(pressedShowTextures) {
-				showTextures = !showTextures;
-				ShaderMod.log("Show Textures: " + showTextures);
-			}
 		}
 		
 		if(!enableShaders) {

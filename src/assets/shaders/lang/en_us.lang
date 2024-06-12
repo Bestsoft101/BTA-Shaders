@@ -1,0 +1,5 @@
+category.controls.shaders=Shaders
+key.openShaderMenu=Open Shader Menu
+key.reloadShaders=Reload Shaders
+key.toggleShaders=Toggle Shaders
+key.showShaderTextures=Show Debug Textures
