@@ -352,6 +352,35 @@ public class Transformers {
 		@Override
 		public void transform(String className, ClassNode classNode) {
 			classNode.interfaces.add("b100/shaders/gui/IGuiScreen");
+			
+			MethodNode handleInput = ASMHelper.findMethod(classNode, "handleInput");
+
+			AbstractInsnNode mouseNext = ASMHelper.findInstruction(handleInput, false, (n) -> FindInstruction.methodInsn(n, "org/lwjgl/input/Mouse", "next", "()Z"));
+			AbstractInsnNode keyboardNext = ASMHelper.findInstruction(handleInput, false, (n) -> FindInstruction.methodInsn(n, "org/lwjgl/input/Keyboard", "next", "()Z"));
+
+			// The label before Mouse.next()
+			LabelNode labelBeforeMouseNext = (LabelNode) ASMHelper.findInstruction(mouseNext, true, (n) -> n instanceof LabelNode);
+			// The label before Keyboard.next()
+			LabelNode labelBeforeKeyboardNext = (LabelNode) ASMHelper.findInstruction(keyboardNext, true, (n) -> n instanceof LabelNode);
+			
+			// The first label after Mouse.next(), insert before this node
+			AbstractInsnNode labelAfterMouseNext = ASMHelper.findInstruction(mouseNext, false, (n) -> n instanceof LabelNode);
+			// The first label after Keyboard.next(), insert before this node
+			AbstractInsnNode labelAfterKeyboardNext = ASMHelper.findInstruction(keyboardNext, false, (n) -> n instanceof LabelNode);
+
+			InsnList insert = new InsnList();
+			insert.add(new LabelNode());
+			insert.add(new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "checkGlobalMouseInput", "()Z"));
+			insert.add(new JumpInsnNode(Opcodes.IFNE, labelBeforeMouseNext)); // If checkGlobalMouseInput returns true, jump to Mouse.next()
+			handleInput.instructions.insertBefore(labelAfterMouseNext, insert);
+			
+			InsnList insert1 = new InsnList();
+			insert1.add(new LabelNode());
+			insert1.add(new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "checkGlobalKeyboardInput", "()Z"));
+			insert1.add(new JumpInsnNode(Opcodes.IFNE, labelBeforeKeyboardNext)); // If checkGlobalKeyboardInput returns true, jump to Keyboard.next()
+			handleInput.instructions.insertBefore(labelAfterKeyboardNext, insert1);
+			
+			ASMHelper.printInstructions(handleInput);
 		}
 		
 	}

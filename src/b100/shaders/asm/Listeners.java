@@ -275,8 +275,22 @@ public class Listeners {
 		LanguageHelper.onReloadLanguages(stringTranslate, languageName);
 	}
 	
+	public static boolean checkGlobalMouseInput() {
+		if(ShaderMod.handleGlobalInput(InputDevice.mouse)) {
+			return true;
+		}
+		return false;
+	}
+	
+	public static boolean checkGlobalKeyboardInput() {
+		if(ShaderMod.handleGlobalInput(InputDevice.keyboard)) {
+			return true;
+		}
+		return false;
+	}
+	
 	public static void checkBoundInputs(Minecraft minecraft, InputDevice inputDevice, CallbackInfo ci) {
-		if(ShaderMod.checkBoundInputs(inputDevice)) {
+		if(ShaderMod.handleIngameInput(inputDevice)) {
 			ci.setCancelled(true);
 			ci.setReturnValue(true);
 		}

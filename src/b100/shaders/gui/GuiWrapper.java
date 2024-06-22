@@ -5,6 +5,9 @@ import static org.lwjgl.opengl.GL11.*;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 
+import b100.shaders.ShaderMod;
+import net.minecraft.client.input.InputDevice;
+
 public class GuiWrapper extends net.minecraft.client.gui.GuiScreen {
 	
 	public GuiScreen screen;
@@ -77,16 +80,22 @@ public class GuiWrapper extends net.minecraft.client.gui.GuiScreen {
 		if(key == Keyboard.KEY_F11) {
 			if(pressed) {
 				mc.gameWindow.toggleFullscreen();
+				return;
 			}
-		}else {
-			try{
-				screen.keyEvent(key, c, pressed, repeat, screen.cursorX, screen.cursorY);
-			}catch (CancelEventException e) {}
 		}
+		if(ShaderMod.handleGlobalInput(InputDevice.keyboard)) {
+			return;
+		}
+		try{
+			screen.keyEvent(key, c, pressed, repeat, screen.cursorX, screen.cursorY);
+		}catch (CancelEventException e) {}
 	}
 	
 	public void handleMouseEvent(int button, boolean pressed) {
 		if(skipInput) {
+			return;
+		}
+		if(ShaderMod.handleGlobalInput(InputDevice.mouse)) {
 			return;
 		}
 		if(button >= 0) {

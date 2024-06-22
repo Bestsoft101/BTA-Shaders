@@ -3,6 +3,7 @@ package b100.shaders.asm.utils;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.FieldInsnNode;
 import org.objectweb.asm.tree.IntInsnNode;
+import org.objectweb.asm.tree.JumpInsnNode;
 import org.objectweb.asm.tree.LdcInsnNode;
 import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.VarInsnNode;
@@ -150,6 +151,16 @@ public class FindInstruction {
 		if(node instanceof VarInsnNode) {
 			VarInsnNode node1 = (VarInsnNode) node;
 			return node1.var == var;
+		}
+		return false;
+	}
+
+	/**
+	 * Check if the given instruction is a JumpInsnNode
+	 */
+	public static boolean jumpInsn(AbstractInsnNode node) {
+		if(node instanceof JumpInsnNode) {
+			return true;
 		}
 		return false;
 	}

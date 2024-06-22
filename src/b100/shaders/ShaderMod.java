@@ -108,11 +108,7 @@ public class ShaderMod {
 		}
 	}
 	
-	public static boolean checkBoundInputs(InputDevice device) {
-		if(config.keyOpenShaderMenu.keyBinding.isPressEvent(device)) {
-			GuiUtils.instance.displayGui(new GuiShaderMenu(null));
-			return true;
-		}
+	public static boolean handleGlobalInput(InputDevice device) {
 		if(config.keyReloadShaders.keyBinding.isPressEvent(device)) {
 			ShaderRenderer shaderRenderer = (ShaderRenderer) mc.renderer;
 			shaderRenderer.shaderPackChanged = true;
@@ -131,6 +127,17 @@ public class ShaderMod {
 				shaderRenderer.showTextures = !shaderRenderer.showTextures;
 				return true;
 			}
+		}
+		return false;
+	}
+	
+	public static boolean handleIngameInput(InputDevice device) {
+		if(handleGlobalInput(device)) {
+			return true;
+		}
+		if(config.keyOpenShaderMenu.keyBinding.isPressEvent(device)) {
+			GuiUtils.instance.displayGui(new GuiShaderMenu(null));
+			return true;
 		}
 		return false;
 	}
