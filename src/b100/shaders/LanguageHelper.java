@@ -1,6 +1,7 @@
 package b100.shaders;
 
 import java.io.InputStream;
+import java.net.URL;
 import java.util.Properties;
 
 import b100.utils.ReflectUtils;
@@ -16,18 +17,21 @@ public class LanguageHelper {
 		if(currentLanguage != defaultLanguage) {
 			loadLanguage(defaultLanguage);
 		}
+		
 		loadLanguage(currentLanguage);
 	}
-	
 	private static void loadLanguage(Language language) {
-		String path = "/assets/shaders/lang/" + language.getId() + ".lang";
-		
 		Properties properties = (Properties) ReflectUtils.getValue(ReflectUtils.getField(Language.class, "entries"), language);
 		
+		int oldSize = properties.size();
+
+		String path = "/" + language.getId() + ".lang";
+		URL url = ShaderMod.class.getResource(path);
 		InputStream stream = null;
 		try {
-			stream = ShaderMod.class.getResourceAsStream(path);
+			stream = url.openStream();
 			if(stream == null) {
+				ShaderMod.log("Missing language file: '" + path + "'!");
 				return;
 			}
 			properties.load(stream);	
@@ -38,6 +42,9 @@ public class LanguageHelper {
 				stream.close();
 			}catch (Exception e) {}
 		}
+		
+		int newSize = properties.size();
+		int loaded = newSize - oldSize;
+		ShaderMod.log("Loaded " + loaded + " Language Keys");
 	}
-
 }

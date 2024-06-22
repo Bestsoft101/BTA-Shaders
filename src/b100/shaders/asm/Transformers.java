@@ -379,8 +379,6 @@ public class Transformers {
 			insert1.add(new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "checkGlobalKeyboardInput", "()Z"));
 			insert1.add(new JumpInsnNode(Opcodes.IFNE, labelBeforeKeyboardNext)); // If checkGlobalKeyboardInput returns true, jump to Keyboard.next()
 			handleInput.instructions.insertBefore(labelAfterKeyboardNext, insert1);
-			
-			ASMHelper.printInstructions(handleInput);
 		}
 		
 	}
