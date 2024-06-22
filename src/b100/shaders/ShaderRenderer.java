@@ -1263,4 +1263,14 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 		floatBuffer.flip();
 	}
 
+	@Override
+	public void beginRenderClouds(float partialTicks) {
+		
+	}
+
+	@Override
+	public void endRenderClouds(float partialTicks) {
+		
+	}
+
 }

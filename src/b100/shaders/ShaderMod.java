@@ -7,7 +7,7 @@ import b100.shaders.gui.GuiShaderMenu;
 import b100.shaders.gui.GuiUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.options.data.OptionsPage;
-import net.minecraft.client.option.InputDevice;
+import net.minecraft.client.input.InputDevice;
 
 public class ShaderMod {
 	

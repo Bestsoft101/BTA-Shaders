@@ -18,7 +18,7 @@ import net.minecraft.client.gui.options.components.KeyBindingComponent;
 import net.minecraft.client.gui.options.components.OptionsCategory;
 import net.minecraft.client.gui.options.data.OptionsPage;
 import net.minecraft.client.gui.options.data.OptionsPages;
-import net.minecraft.client.option.InputDevice;
+import net.minecraft.client.input.InputDevice;
 import net.minecraft.client.render.ChunkRenderer;
 import net.minecraft.client.render.RenderGlobal;
 import net.minecraft.client.render.Renderer;

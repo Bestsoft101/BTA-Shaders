@@ -16,6 +16,7 @@ import org.lwjgl.input.Keyboard;
 
 import b100.shaders.ShaderMod;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.input.InputDevice;
 import net.minecraft.client.option.KeyBinding;
 
 public class ShaderModConfig {
@@ -24,10 +25,10 @@ public class ShaderModConfig {
 	
 	public File configFile;
 	
-	public CustomKeybind keyOpenShaderMenu = new CustomKeybind(new KeyBinding("key.openShaderMenu").bindKeyboard(Keyboard.KEY_O));
-	public CustomKeybind keyReloadShaders = new CustomKeybind(new KeyBinding("key.reloadShaders").bindKeyboard(Keyboard.KEY_R));
-	public CustomKeybind keyToggleShaders = new CustomKeybind(new KeyBinding("key.toggleShaders").bindKeyboard(Keyboard.KEY_K));
-	public CustomKeybind keyShowTextures = new CustomKeybind(new KeyBinding("key.showShaderTextures").bindKeyboard(Keyboard.KEY_NONE));
+	public CustomKeybind keyOpenShaderMenu = new CustomKeybind(new KeyBinding("key.openShaderMenu").setDefault(InputDevice.keyboard, Keyboard.KEY_O));
+	public CustomKeybind keyReloadShaders = new CustomKeybind(new KeyBinding("key.reloadShaders").setDefault(InputDevice.keyboard, Keyboard.KEY_R));
+	public CustomKeybind keyToggleShaders = new CustomKeybind(new KeyBinding("key.toggleShaders").setDefault(InputDevice.keyboard, Keyboard.KEY_K));
+	public CustomKeybind keyShowTextures = new CustomKeybind(new KeyBinding("key.showShaderTextures"));
 	
 	private Map<String, ConfigEntry> configEntries = new HashMap<>();
 	
