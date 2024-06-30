@@ -1,9 +1,9 @@
 package b100.shaders.asm.utils;
 
+import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.FieldInsnNode;
 import org.objectweb.asm.tree.IntInsnNode;
-import org.objectweb.asm.tree.JumpInsnNode;
 import org.objectweb.asm.tree.LdcInsnNode;
 import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.VarInsnNode;
@@ -154,13 +154,13 @@ public class FindInstruction {
 		}
 		return false;
 	}
-
+	
 	/**
-	 * Check if the given instruction is a JumpInsnNode
+	 * Check if the given instruction has any of the RETURN opcodes
 	 */
-	public static boolean jumpInsn(AbstractInsnNode node) {
-		if(node instanceof JumpInsnNode) {
-			return true;
+	public static boolean returnInsn(AbstractInsnNode node) {
+		if(node != null) {
+			return node.getOpcode() >= Opcodes.IRETURN && node.getOpcode() <= Opcodes.RETURN;
 		}
 		return false;
 	}

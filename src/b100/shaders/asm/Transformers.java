@@ -405,12 +405,31 @@ public class Transformers {
 		}
 	}
 	
+	class RenderEngineTransformer extends ClassTransformer {
+
+		@Override
+		public boolean accepts(String className) {
+			return className.equals("net/minecraft/client/render/RenderEngine");
+		}
+
+		@Override
+		public void transform(String className, ClassNode classNode) {
+			MethodNode refreshTextures = ASMHelper.findMethod(classNode, "refreshTextures");
+			
+			InsnList insert = new InsnList();
+			insert.add(new MethodInsnNode(Opcodes.INVOKESTATIC, listenerClass, "onRefreshTextures", "()V"));
+			
+			ASMHelper.insertBeforeLastReturn(refreshTextures, insert);
+		}
+		
+	}
+	
 	public static void makePublic(FieldNode field) {
 		field.access = (field.access & ~Opcodes.ACC_PRIVATE) | Opcodes.ACC_PUBLIC;
 	}
 	
 	public static InsnList createMethodCancel(ClassNode classNode, MethodNode method, String listenerMethodName) {
-		// TODO Add suppoort for non-void methods
+		// TODO Add support for non-void methods
 		
 		InsnList insert = new InsnList();
 		LabelNode labelAfterReturn = new LabelNode();

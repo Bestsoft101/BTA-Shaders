@@ -302,6 +302,26 @@ public abstract class ASMHelper {
 
 	//////////////////////////////////////////
 	
+	public static void insertAtStart(MethodNode methodNode, InsnList insert) {
+		insertAtStart(methodNode.instructions, insert);
+	}
+	
+	public static void insertAtStart(InsnList instructions, InsnList insert) {
+		instructions.insertBefore(instructions.getFirst(), insert);
+	}
+	
+	public static void insertBeforeLastReturn(MethodNode methodNode, InsnList insert) {
+		insertBeforeLastReturn(methodNode.instructions, insert);
+	}
+	
+	public static void insertBeforeLastReturn(InsnList instructions, InsnList insert) {
+		AbstractInsnNode returnNode = findInstruction(instructions.getLast(), true, (n) -> FindInstruction.returnInsn(n));
+		
+		insert.insertBefore(returnNode, insert);
+	}
+
+	//////////////////////////////////////////
+	
 	public static void replaceInstruction(MethodNode method, AbstractInsnNode oldInstruction, AbstractInsnNode newInstruction) {
 		InsnList newInstructions = new InsnList();
 		newInstructions.add(newInstruction);
@@ -419,18 +439,17 @@ public abstract class ASMHelper {
 	}
 	
 	public static void printInstructions(InsnList instructions, Map<Label, String> labelNames) {
-		for(int i=0; i < instructions.size(); i++) {
-			AbstractInsnNode instruction = instructions.get(i); 
-			
+		AbstractInsnNode instruction = instructions.getFirst();
+		
+		while(instruction != null) {
 			if(instruction instanceof LabelNode) {
 				LabelNode labelNode = (LabelNode) instruction;
 				print(labelNames.get(labelNode.getLabel())+":");
-			}else if(instruction instanceof LineNumberNode) {
-//				LineNumberNode node = (LineNumberNode) instruction;
-//				System.out.println(node.line+":");
 			}else {
 				print("  " + toString(instruction, labelNames));	
 			}
+			
+			instruction = instruction.getNext();
 		}
 	}
 	

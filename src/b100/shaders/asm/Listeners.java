@@ -3,15 +3,21 @@ package b100.shaders.asm;
 import static b100.shaders.ShaderMod.*;
 import static org.lwjgl.opengl.GL11.*;
 
+import java.awt.image.BufferedImage;
+import java.util.ArrayList;
+import java.util.List;
+
 import b100.natrium.CustomTessellator;
 import b100.natrium.NatriumMod;
 import b100.shaders.CustomRenderer;
 import b100.shaders.LanguageHelper;
 import b100.shaders.ShaderMod;
 import b100.shaders.ShaderRenderer;
+import b100.shaders.TextureHelper;
 import b100.shaders.asm.utils.CallbackInfo;
 import b100.shaders.gui.GuiShaderMenu;
 import b100.shaders.gui.GuiUtils;
+import net.minecraft.client.GLAllocation;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.options.GuiOptions;
 import net.minecraft.client.gui.options.components.KeyBindingComponent;
@@ -27,6 +33,9 @@ import net.minecraft.client.render.camera.EntityCamera;
 import net.minecraft.client.render.camera.ICamera;
 import net.minecraft.client.render.culling.CameraFrustum;
 import net.minecraft.client.render.entity.EntityRenderer;
+import net.minecraft.client.render.stitcher.AtlasStitcher;
+import net.minecraft.client.render.stitcher.IconCoordinate;
+import net.minecraft.client.render.stitcher.TextureRegistry;
 import net.minecraft.client.render.tessellator.Tessellator;
 import net.minecraft.core.block.Block;
 import net.minecraft.core.entity.Entity;
@@ -59,6 +68,74 @@ public class Listeners {
 		if(guiOptions.selectedPage == ShaderMod.optionsPage) {
 			guiOptions.selectedPage = OptionsPages.GENERAL;
 			GuiUtils.instance.displayGui(new GuiShaderMenu(mc.currentScreen));
+		}
+	}
+	
+	public static void onRefreshTextures() {
+		if(!ShaderMod.enableNormals && !ShaderMod.enableSpecular) {
+			return;
+		}
+		
+		ShaderMod.log("Setup Normal & Specular");
+		
+		AtlasStitcher blockAtlas = TextureRegistry.blockAtlas;
+		
+		BufferedImage normalImage = new BufferedImage(blockAtlas.getAtlasWidth(), blockAtlas.getAtlasHeight(), BufferedImage.TYPE_INT_ARGB);
+		BufferedImage specularImage = new BufferedImage(blockAtlas.getAtlasWidth(), blockAtlas.getAtlasHeight(), BufferedImage.TYPE_INT_ARGB);
+		
+		TextureHelper.fillColor(normalImage, 0xFF7F7FFF);
+		TextureHelper.fillColor(specularImage, 0xFF000000);
+		
+		List<String> blockTextureKeys = new ArrayList<>(blockAtlas.textureMap.keySet());
+		blockTextureKeys.sort(String.CASE_INSENSITIVE_ORDER);
+		
+		int normalTextureCount = 0;
+		int specularTextureCount = 0;
+		
+		for(String string : blockTextureKeys) {
+			IconCoordinate coord = blockAtlas.textureMap.get(string);
+			
+			int x = coord.iconX;
+			int y = coord.iconY;
+			
+			int i = string.indexOf(':');
+			
+			String namespace = string.substring(0, i);
+			String name = string.substring(i + 1);
+			
+			if(ShaderMod.enableNormals) {
+				String path = "/assets/" + namespace + "/textures/block/" + name + "_n.png";
+				BufferedImage normal = TextureHelper.getTextureIfExists(path);
+				if(normal != null) {
+					TextureHelper.drawImage(normal, normalImage, x, y);
+					normalTextureCount++;
+				}	
+			}
+			
+			if(ShaderMod.enableSpecular) {
+				String path = "/assets/" + namespace + "/textures/block/" + name + "_s.png";
+				BufferedImage specular = TextureHelper.getTextureIfExists(path);
+				if(specular != null) {
+					TextureHelper.drawImage(specular, specularImage, x, y);
+					specularTextureCount++;
+				}	
+			}
+		}
+		
+		if(ShaderMod.enableNormals) {
+			ShaderMod.log(normalTextureCount + " Normal Textures");
+			if(ShaderMod.normalTexture == 0) {
+				ShaderMod.normalTexture = GLAllocation.generateTexture();
+			}
+			TextureHelper.setTextureImage(ShaderMod.normalTexture, normalImage);	
+		}
+		
+		if(ShaderMod.enableNormals) {
+			ShaderMod.log(specularTextureCount + " Specular Textures");
+			if(ShaderMod.specularTexture == 0) {
+				ShaderMod.specularTexture = GLAllocation.generateTexture();
+			}
+			TextureHelper.setTextureImage(ShaderMod.specularTexture, specularImage);	
 		}
 	}
 	

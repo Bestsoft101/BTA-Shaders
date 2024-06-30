@@ -22,6 +22,12 @@ public class ShaderMod {
 	
 	public static OptionsPage optionsPage;
 	
+	public static int normalTexture;
+	public static int specularTexture;
+	
+	public static boolean enableNormals = false;
+	public static boolean enableSpecular = false;
+	
 	static {
 		grabInstanceAndDirectory();
 	}

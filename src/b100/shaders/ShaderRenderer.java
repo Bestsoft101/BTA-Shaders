@@ -66,6 +66,8 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 	public int shadowMapResolution = 1024;
 	public float shadowDistance = 64.0f;
 	public float sunPathRotation = 0.0f;
+	public boolean enableNormals = false;
+	public boolean enableSpecular= false;
 
 	public boolean directionalLight = true;
 	
@@ -136,6 +138,12 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 		if(directionalLight != prevDirectionalLight) {
 			mc.renderGlobal.loadRenderers();
 		}
+		
+		if(ShaderMod.enableNormals != enableNormals || ShaderMod.enableSpecular != enableSpecular) {
+			ShaderMod.enableNormals = enableNormals;
+			ShaderMod.enableSpecular = enableSpecular;
+			ShaderMod.mc.renderEngine.refreshTextures(new ArrayList<>());
+		}
 	}
 	
 	public void loadRenderPassConfig() {
@@ -161,6 +169,18 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 				directionalLight = root.getBoolean("directionalLight");
 			}else {
 				directionalLight = true;
+			}
+			
+			if(root.has("loadNormalTextures")) {
+				enableNormals = root.getBoolean("loadNormalTextures");
+			}else {
+				enableNormals = false;
+			}
+			
+			if(root.has("loadSpecularTextures")) {
+				enableSpecular = root.getBoolean("loadSpecularTextures");
+			}else {
+				enableSpecular = false;
 			}
 			
 			JsonObject shadow = root.getObject("shadow");
@@ -675,11 +695,32 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 		if(currentShader.bind()) {
 			glUniform1i(shader.getUniform("fogMode"), fogMode);
 			
+			int texCount = 1;
+			
 			if(LightmapHelper.isLightmapEnabled()) {
-				glActiveTexture(GL_TEXTURE1);
+				glActiveTexture(GL_TEXTURE0 + texCount);
 				glBindTexture(GL_TEXTURE_2D, mc.worldRenderer.lightmapHelper.lightmapTexture);
-				glUniform1i(shader.getUniform("lightmap"), 1);
+				glUniform1i(shader.getUniform("lightmap"), texCount);
 				glActiveTexture(GL_TEXTURE0);
+				texCount++;
+			}
+			
+			boolean isTerrain = shader == terrainShader;
+			if(isTerrain) {
+				if(enableNormals) {
+					glActiveTexture(GL_TEXTURE0 + texCount);
+					glBindTexture(GL_TEXTURE_2D, ShaderMod.normalTexture);
+					glUniform1i(shader.getUniform("normals"), texCount);
+					glActiveTexture(GL_TEXTURE0);
+					texCount++;
+				}
+				if(enableSpecular) {
+					glActiveTexture(GL_TEXTURE0 + texCount);
+					glBindTexture(GL_TEXTURE_2D, ShaderMod.specularTexture);
+					glUniform1i(shader.getUniform("specular"), texCount);
+					glActiveTexture(GL_TEXTURE0);
+					texCount++;
+				}
 			}
 			
 			setupCommonUniforms(shader, 0);
