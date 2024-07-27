@@ -8,8 +8,6 @@ import java.io.InputStream;
 
 import javax.imageio.ImageIO;
 
-import org.lwjgl.opengl.GL11;
-
 import net.minecraft.core.util.helper.Buffer;
 
 public abstract class TextureHelper {

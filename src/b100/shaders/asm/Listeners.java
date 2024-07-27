@@ -42,6 +42,7 @@ import net.minecraft.core.entity.Entity;
 import net.minecraft.core.item.Item;
 import net.minecraft.core.item.ItemStack;
 import net.minecraft.core.lang.I18n;
+import net.minecraft.core.util.collection.NamespaceID;
 
 public class Listeners {
 	
@@ -84,22 +85,21 @@ public class Listeners {
 		BufferedImage specularImage = new BufferedImage(blockAtlas.getAtlasWidth(), blockAtlas.getAtlasHeight(), BufferedImage.TYPE_INT_ARGB);
 		
 		TextureHelper.fillColor(normalImage, 0xFF7F7FFF);
-		TextureHelper.fillColor(specularImage, 0xFF000000);
+		TextureHelper.fillColor(specularImage, 0x00000000);
 		
-		List<String> blockTextureKeys = new ArrayList<>(blockAtlas.textureMap.keySet());
-		blockTextureKeys.sort(String.CASE_INSENSITIVE_ORDER);
+		List<NamespaceID> blockTextureKeys = new ArrayList<>(blockAtlas.textureMap.keySet());
 		
 		int normalTextureCount = 0;
 		int specularTextureCount = 0;
 		
-		for(String string : blockTextureKeys) {
-			IconCoordinate coord = blockAtlas.textureMap.get(string);
+		for(NamespaceID id : blockTextureKeys) {
+			IconCoordinate coord = blockAtlas.textureMap.get(id);
 			
 			int x = coord.iconX;
 			int y = coord.iconY;
 			
+			String string = id.toString();
 			int i = string.indexOf(':');
-			
 			String namespace = string.substring(0, i);
 			String name = string.substring(i + 1);
 			

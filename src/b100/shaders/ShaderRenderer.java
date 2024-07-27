@@ -7,6 +7,7 @@ import static org.lwjgl.opengl.GL15.*;
 import static org.lwjgl.opengl.GL20.*;
 import static org.lwjgl.opengl.GL30.*;
 
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
@@ -17,12 +18,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
+import javax.imageio.ImageIO;
+
 import org.lwjgl.opengl.Display;
 import org.lwjgl.opengl.GL30;
 import org.lwjgl.util.vector.Matrix4f;
 
 import b100.json.JsonParser;
 import b100.json.element.JsonArray;
+import b100.json.element.JsonElement;
 import b100.json.element.JsonEntry;
 import b100.json.element.JsonObject;
 import b100.natrium.NatriumMod;
@@ -104,6 +108,8 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 	private Shader currentShader;
 	
 	public boolean shaderPackChanged = false;
+	
+	private final TextureCache externalTextureCache = new TextureCache();
 	
 	public ShaderRenderer(Minecraft minecraft) {
 		mc = minecraft;
@@ -257,12 +263,12 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 			JsonObject post = root.getObject("post");
 			
 			if(base != null) {
-				parseRenderConfig(base, baseRenderPasses, baseFramebuffer);
+				parseRenderConfig(shaderPackFile, base, baseRenderPasses, baseFramebuffer);
 			}else {
 				baseFramebuffer.create(0, new TextureConfig[] {new TextureConfig()});
 			}
 			if(post != null) {
-				parseRenderConfig(post, postRenderPasses, postFramebuffer);
+				parseRenderConfig(shaderPackFile, post, postRenderPasses, postFramebuffer);
 			}else {
 				postFramebuffer.create(0, new TextureConfig[] {new TextureConfig()});
 			}
@@ -282,7 +288,7 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 		}
 	}
 	
-	public void parseRenderConfig(JsonObject object, List<RenderPass> renderPasses, Framebuffer framebuffer) {
+	public void parseRenderConfig(File shaderPackFile, JsonObject object, List<RenderPass> renderPasses, Framebuffer framebuffer) {
 		JsonObject render = object.getObject("render");
 		
 		if(render != null) {
@@ -302,9 +308,9 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 					if(array == null) {
 						throw new RuntimeException("Missing \"in\" array in renderpass \"" + entry.name + "\"!");
 					}
-					renderPass.in = parseIntArray(array);
+					renderPass.in = parseInputTextureArray(shaderPackFile, array);
 				}else {
-					renderPass.in = new int[] {0};
+					renderPass.in = new TextureInput[] { new TextureInputInternal(0) };
 				}
 				
 				if(i < entries.size() - 1) {
@@ -348,7 +354,11 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 			RenderPass rp = renderPasses.get(i);
 			if(rp.in != null) {
 				for(int j=0; j < rp.in.length; j++) {
-					textureCount = Math.max(textureCount, rp.in[j]);
+					TextureInput textureInput = rp.in[j];
+					if(textureInput instanceof TextureInputInternal) {
+						TextureInputInternal ti = (TextureInputInternal) textureInput;
+						textureCount = Math.max(textureCount, ti.id);
+					}
 				}
 			}
 			if(rp.out != null) {
@@ -705,22 +715,19 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 				texCount++;
 			}
 			
-			boolean isTerrain = shader == terrainShader;
-			if(isTerrain) {
-				if(enableNormals) {
-					glActiveTexture(GL_TEXTURE0 + texCount);
-					glBindTexture(GL_TEXTURE_2D, ShaderMod.normalTexture);
-					glUniform1i(shader.getUniform("normals"), texCount);
-					glActiveTexture(GL_TEXTURE0);
-					texCount++;
-				}
-				if(enableSpecular) {
-					glActiveTexture(GL_TEXTURE0 + texCount);
-					glBindTexture(GL_TEXTURE_2D, ShaderMod.specularTexture);
-					glUniform1i(shader.getUniform("specular"), texCount);
-					glActiveTexture(GL_TEXTURE0);
-					texCount++;
-				}
+			if(enableNormals) {
+				glActiveTexture(GL_TEXTURE0 + texCount);
+				glBindTexture(GL_TEXTURE_2D, ShaderMod.normalTexture);
+				glUniform1i(shader.getUniform("normals"), texCount);
+				glActiveTexture(GL_TEXTURE0);
+				texCount++;
+			}
+			if(enableSpecular) {
+				glActiveTexture(GL_TEXTURE0 + texCount);
+				glBindTexture(GL_TEXTURE_2D, ShaderMod.specularTexture);
+				glUniform1i(shader.getUniform("specular"), texCount);
+				glActiveTexture(GL_TEXTURE0);
+				texCount++;
 			}
 			
 			setupCommonUniforms(shader, 0);
@@ -899,11 +906,29 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 				
 				for(int inIndex=0; inIndex < renderPass.in.length; inIndex++) {
 					glActiveTexture(GL_TEXTURE0 + textureId);
-					glBindTexture(GL_TEXTURE_2D, framebuffer.colortex[renderPass.in[inIndex]]);
-					glUniform1i(renderPass.shader.getUniform(colortexStrings[inIndex]), textureId);
-					if(framebuffer.textureConfig[renderPass.in[inIndex]].enableMipmap) {
-						glGenerateMipmap(GL_TEXTURE_2D);
+					
+					TextureInput inputTexture = renderPass.in[inIndex];
+					if(inputTexture instanceof TextureInputInternal) {
+						TextureInputInternal ti = (TextureInputInternal) inputTexture;
+						
+						glBindTexture(GL_TEXTURE_2D, framebuffer.colortex[ti.id]);	
+						glUniform1i(renderPass.shader.getUniform(colortexStrings[inIndex]), textureId);
+						if(framebuffer.textureConfig[ti.id].enableMipmap) {
+							glGenerateMipmap(GL_TEXTURE_2D);
+						}
+					}else if(inputTexture instanceof TextureInputExternal) {
+						TextureInputExternal ti = (TextureInputExternal) inputTexture;
+						
+						int id = externalTextureCache.getTexture(ti.path);
+						glBindTexture(GL_TEXTURE_2D, id);
+						
+//						int w = glGetTexLevelParameteri(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH);
+//						int h = glGetTexLevelParameteri(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT);
+//						System.out.println("ID: " + id + " = " + w + " x " + h + " " + colortexStrings[inIndex]);
+						
+						glUniform1i(renderPass.shader.getUniform(colortexStrings[inIndex]), textureId);
 					}
+					
 					textureId++;
 				}
 				
@@ -925,7 +950,18 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 			}else {
 				// Shader not compiled,
 				// just draw first input texture
-				glBindTexture(GL_TEXTURE_2D, framebuffer.colortex[renderPass.in[0]]);
+				TextureInput inputTexture = renderPass.in[0];
+				if(inputTexture instanceof TextureInputInternal) {
+					TextureInputInternal ti = (TextureInputInternal) inputTexture;
+					
+					glBindTexture(GL_TEXTURE_2D, framebuffer.colortex[ti.id]);
+				}else if(inputTexture instanceof TextureInputExternal) {
+					TextureInputExternal ti = (TextureInputExternal) inputTexture;
+					
+					int id = externalTextureCache.getTexture(ti.path);
+					glBindTexture(GL_TEXTURE_2D, id);
+					glUniform1i(renderPass.shader.getUniform(colortexStrings[0]), id);
+				}
 			}
 			
 			if(!last) {
@@ -1139,6 +1175,8 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 		sunPathRotation = 0.0f;
 		
 		directionalLight = true;
+		
+		externalTextureCache.deleteAll();
 	}
 	
 	static class Framebuffer {
@@ -1229,9 +1267,31 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 	public static class RenderPass {
 		
 		public Shader shader;
-		public int[] in;
+		public TextureInput[] in;
 		public int[] out;
 		
+	}
+	
+	public static abstract class TextureInput {
+		
+	}
+	
+	public static class TextureInputInternal extends TextureInput {
+		
+		public int id;
+
+		public TextureInputInternal(int id) {
+			this.id = id;
+		}
+	}
+	
+	public static class TextureInputExternal extends TextureInput {
+		
+		public String path;
+
+		public TextureInputExternal(String path) {
+			this.path = path;
+		}
 	}
 	
 	public static boolean isNullOrZeroArray(int[] arr) {
@@ -1252,6 +1312,32 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 		}
 		
 		return intArray;
+	}
+	
+	public TextureInput[] parseInputTextureArray(File shaderPackFile, JsonArray array) {
+		TextureInput[] textureArray = new TextureInput[array.length()];
+		
+		for(int i=0; i < textureArray.length; i++) {
+			JsonElement element = array.get(i);
+			if(element.isNumber()) {
+				textureArray[i] = new TextureInputInternal(element.getAsNumber().getInteger());
+			}else {
+				String name = element.getAsString().value;
+				
+				File imageFile = new File(shaderPackFile, name);
+				BufferedImage image;
+				try {
+					image = ImageIO.read(imageFile);	
+				}catch (Exception e) {
+					throw new RuntimeException("Reading image: '" + imageFile.getAbsolutePath() + "'!");
+				}
+				ShaderMod.log("Loaded image '" + imageFile.getName() + "': " + image.getWidth() + " x " + image.getHeight());
+				
+				externalTextureCache.setupTexture(name, image);
+				textureArray[i] = new TextureInputExternal(name);
+			}
+		}
+		return textureArray;
 	}
 	
 	public static void resetGlErrors() {
