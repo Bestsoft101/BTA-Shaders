@@ -221,15 +221,8 @@ public abstract class ASMHelper {
 		
 		return foundMethods.get(0);
 	}
-	
 	public static MethodNode findMethod(ClassNode classNode, Condition<MethodNode> condition) {
-		List<MethodNode> foundMethods = new ArrayList<MethodNode>();
-		
-		for(MethodNode methodNode : classNode.methods) {
-			if(condition.isTrue(methodNode)) {
-				foundMethods.add(methodNode);
-			}
-		}
+		List<MethodNode> foundMethods = findAllMethods(classNode, condition);
 		
 		if(foundMethods.size() != 1) {
 			StringBuilder msg = new StringBuilder();
@@ -251,6 +244,16 @@ public abstract class ASMHelper {
 		}
 		
 		return foundMethods.get(0);
+	}
+	
+	public static List<MethodNode> findAllMethods(ClassNode classNode, Condition<MethodNode> condition) {
+		List<MethodNode> foundMethods = new ArrayList<MethodNode>();
+		for(MethodNode methodNode : classNode.methods) {
+			if(condition.isTrue(methodNode)) {
+				foundMethods.add(methodNode);
+			}
+		}
+		return foundMethods;
 	}
 
 	public static List<AbstractInsnNode> findAllInstructions(MethodNode method, Condition<AbstractInsnNode> condition) {
@@ -317,7 +320,7 @@ public abstract class ASMHelper {
 	public static void insertBeforeLastReturn(InsnList instructions, InsnList insert) {
 		AbstractInsnNode returnNode = findInstruction(instructions.getLast(), true, (n) -> FindInstruction.returnInsn(n));
 		
-		insert.insertBefore(returnNode, insert);
+		instructions.insertBefore(returnNode, insert);
 	}
 
 	//////////////////////////////////////////
