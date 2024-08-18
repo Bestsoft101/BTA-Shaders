@@ -2,12 +2,15 @@ package b100.shaders;
 
 import java.io.File;
 
+import org.lwjgl.input.Keyboard;
+
 import b100.shaders.config.ShaderModConfig;
 import b100.shaders.gui.GuiShaderMenu;
 import b100.shaders.gui.GuiUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.options.data.OptionsPage;
 import net.minecraft.client.input.InputDevice;
+import net.minecraft.client.option.KeyBinding;
 
 public class ShaderMod {
 	
@@ -115,19 +118,19 @@ public class ShaderMod {
 	}
 	
 	public static boolean handleGlobalInput(InputDevice device) {
-		if(config.keyReloadShaders.keyBinding.isPressEvent(device)) {
+		if(isGlobalPressEvent(config.keyReloadShaders.keyBinding, device)) {
 			ShaderRenderer shaderRenderer = (ShaderRenderer) mc.renderer;
 			shaderRenderer.shaderPackChanged = true;
 			logAndDisplay("Reloading shaders...");
 			return true;
 		}
-		if(config.keyToggleShaders.keyBinding.isPressEvent(device)) {
+		if(isGlobalPressEvent(config.keyToggleShaders.keyBinding, device)) {
 			ShaderRenderer shaderRenderer = (ShaderRenderer) mc.renderer;
 			shaderRenderer.enableShaders = !shaderRenderer.enableShaders;
 			logAndDisplay("Shaders: " + (shaderRenderer.enableShaders ? "On" : "Off"));
 			return true;
 		}
-		if(config.keyShowTextures.keyBinding.isPressEvent(device)) {
+		if(isGlobalPressEvent(config.keyShowTextures.keyBinding, device)) {
 			ShaderRenderer shaderRenderer = (ShaderRenderer) mc.renderer;
 			if(shaderRenderer.enableShaders) {
 				shaderRenderer.showTextures = !shaderRenderer.showTextures;
@@ -146,6 +149,20 @@ public class ShaderMod {
 			return true;
 		}
 		return false;
+	}
+	
+	public static boolean isGlobalPressEvent(KeyBinding keyBinding, InputDevice device) {
+		boolean allowGlobal = false;
+		if(keyBinding.getInputDevice() == InputDevice.keyboard) {
+			int keyCode = keyBinding.getKeyCode();
+			if(keyCode < Keyboard.KEY_F1 || keyCode > Keyboard.KEY_F19) {
+				allowGlobal = true;
+			}
+		}
+		if(mc.currentScreen != null && !allowGlobal) {
+			return false;
+		}
+		return keyBinding.isPressEvent(device);
 	}
 
 }
