@@ -25,9 +25,9 @@ public class ShaderModConfig {
 	
 	public File configFile;
 	
-	public CustomKeybind keyOpenShaderMenu = new CustomKeybind(new KeyBinding("key.openShaderMenu").setDefault(InputDevice.keyboard, Keyboard.KEY_O));
-	public CustomKeybind keyReloadShaders = new CustomKeybind(new KeyBinding("key.reloadShaders").setDefault(InputDevice.keyboard, Keyboard.KEY_R));
-	public CustomKeybind keyToggleShaders = new CustomKeybind(new KeyBinding("key.toggleShaders").setDefault(InputDevice.keyboard, Keyboard.KEY_K));
+	public CustomKeybind keyOpenShaderMenu = new CustomKeybind(new KeyBinding("key.openShaderMenu").setDefault(InputDevice.keyboard, Keyboard.KEY_F8));
+	public CustomKeybind keyReloadShaders = new CustomKeybind(new KeyBinding("key.reloadShaders").setDefault(InputDevice.keyboard, Keyboard.KEY_F7));
+	public CustomKeybind keyToggleShaders = new CustomKeybind(new KeyBinding("key.toggleShaders").setDefault(InputDevice.keyboard, Keyboard.KEY_F6));
 	public CustomKeybind keyShowTextures = new CustomKeybind(new KeyBinding("key.showShaderTextures"));
 	
 	private Map<String, ConfigEntry> configEntries = new HashMap<>();
