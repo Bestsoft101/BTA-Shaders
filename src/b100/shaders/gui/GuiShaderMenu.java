@@ -122,6 +122,8 @@ public class GuiShaderMenu extends GuiScreen implements ActionListener {
 				}
 			}
 		}
+		
+		onResize();
 	}
 	
 	@Override
