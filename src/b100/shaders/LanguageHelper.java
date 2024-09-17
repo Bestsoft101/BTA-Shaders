@@ -29,6 +29,10 @@ public class LanguageHelper {
 		URL url = ShaderMod.class.getResource(path);
 		InputStream stream = null;
 		try {
+			if(url == null) {
+				ShaderMod.log("Missing language file: '" + path + "'!");
+				return;
+			}
 			stream = url.openStream();
 			if(stream == null) {
 				ShaderMod.log("Missing language file: '" + path + "'!");
