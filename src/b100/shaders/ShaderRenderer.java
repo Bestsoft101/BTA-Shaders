@@ -8,7 +8,6 @@ import static org.lwjgl.opengl.GL20.*;
 import static org.lwjgl.opengl.GL30.*;
 
 import java.awt.image.BufferedImage;
-import java.io.File;
 import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -17,8 +16,6 @@ import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-
-import javax.imageio.ImageIO;
 
 import org.lwjgl.opengl.Display;
 import org.lwjgl.opengl.GL30;
@@ -153,20 +150,22 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 	}
 	
 	public void loadRenderPassConfig() {
+		ShaderProvider shaderProvider = null;
 		try {
-			File shaderPackFile = ShaderMod.getCurrentShaderPackFile();
-			if(shaderPackFile == null) {
+			shaderProvider = ShaderMod.getCurrentShaderPack();
+			if(shaderProvider == null) {
 				throw new NullPointerException("No shader pack selected!");
 			}
+			shaderProvider.open();
 			
-			ShaderMod.log("Loading Shader: " + shaderPackFile.getName());
+			ShaderMod.log("Loading Shader: " + shaderProvider.getName());
 			
-			File shaderJson = new File(shaderPackFile, "shader.json");
-			if(!shaderJson.exists()) {
+			String shaderJson = shaderProvider.getFileContentAsString("shader.json");
+			if(shaderJson == null) {
 				throw new NullPointerException("Missing shader json!");
 			}
 			
-			JsonObject root = JsonParser.instance.parseFileContent(shaderJson);
+			JsonObject root = JsonParser.instance.parse(shaderJson);
 			if(root == null) {
 				throw new NullPointerException("Json is null!");
 			}
@@ -263,12 +262,12 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 			JsonObject post = root.getObject("post");
 			
 			if(base != null) {
-				parseRenderConfig(shaderPackFile, base, baseRenderPasses, baseFramebuffer);
+				parseRenderConfig(shaderProvider, base, baseRenderPasses, baseFramebuffer);
 			}else {
 				baseFramebuffer.create(0, new TextureConfig[] {new TextureConfig()});
 			}
 			if(post != null) {
-				parseRenderConfig(shaderPackFile, post, postRenderPasses, postFramebuffer);
+				parseRenderConfig(shaderProvider, post, postRenderPasses, postFramebuffer);
 			}else {
 				postFramebuffer.create(0, new TextureConfig[] {new TextureConfig()});
 			}
@@ -286,9 +285,13 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 			baseFramebuffer.create(1, new TextureConfig[] {new TextureConfig()});
 			postFramebuffer.create(1, new TextureConfig[] {new TextureConfig()});
 		}
+		
+		if(shaderProvider != null) {
+			shaderProvider.close();
+		}
 	}
 	
-	public void parseRenderConfig(File shaderPackFile, JsonObject object, List<RenderPass> renderPasses, Framebuffer framebuffer) {
+	public void parseRenderConfig(ShaderProvider shaderProvider, JsonObject object, List<RenderPass> renderPasses, Framebuffer framebuffer) {
 		JsonObject render = object.getObject("render");
 		
 		if(render != null) {
@@ -308,7 +311,7 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 					if(array == null) {
 						throw new RuntimeException("Missing \"in\" array in renderpass \"" + entry.name + "\"!");
 					}
-					renderPass.in = parseInputTextureArray(shaderPackFile, array);
+					renderPass.in = parseInputTextureArray(shaderProvider, array);
 				}else {
 					renderPass.in = new TextureInput[] { new TextureInputInternal(0) };
 				}
@@ -1314,7 +1317,7 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 		return intArray;
 	}
 	
-	public TextureInput[] parseInputTextureArray(File shaderPackFile, JsonArray array) {
+	public TextureInput[] parseInputTextureArray(ShaderProvider shaderProvider, JsonArray array) {
 		TextureInput[] textureArray = new TextureInput[array.length()];
 		
 		for(int i=0; i < textureArray.length; i++) {
@@ -1324,14 +1327,11 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 			}else {
 				String name = element.getAsString().value;
 				
-				File imageFile = new File(shaderPackFile, name);
-				BufferedImage image;
-				try {
-					image = ImageIO.read(imageFile);	
-				}catch (Exception e) {
-					throw new RuntimeException("Reading image: '" + imageFile.getAbsolutePath() + "'!");
+				BufferedImage image = shaderProvider.getImage(name);
+				if(image == null) {
+					throw new RuntimeException("Image '" + name + "' does not exist!");
 				}
-				ShaderMod.log("Loaded image '" + imageFile.getName() + "': " + image.getWidth() + " x " + image.getHeight());
+				ShaderMod.log("Loaded image '" + name + "': " + image.getWidth() + " x " + image.getHeight());
 				
 				externalTextureCache.setupTexture(name, image);
 				textureArray[i] = new TextureInputExternal(name);

@@ -3,9 +3,6 @@ package b100.shaders;
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL20.*;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -95,40 +92,11 @@ public class Shader {
 	}
 	
 	public String getShaderSource(String name) {
-		File shaderpackFile = ShaderMod.getCurrentShaderPackFile();
-		if(shaderpackFile == null) {
+		ShaderProvider shaderProvider = ShaderMod.getCurrentShaderPack();
+		if(shaderProvider == null) {
 			return null;
 		}
-		
-		File shaderFile = new File(shaderpackFile, name);
-		if(!shaderFile.exists()) {
-			return null;
-		}
-		
-		BufferedReader br = null;
-		StringBuilder string = new StringBuilder();
-		
-		try {
-			br = new BufferedReader(new FileReader(shaderFile));
-			
-			while(true) {
-				String line = br.readLine();
-				if(line == null) {
-					break;
-				}
-				string.append(line).append("\n");
-			}
-			
-			return string.toString();
-		}catch (Exception e) {
-			System.err.println("Error reading shader file '" + shaderFile.getAbsolutePath() + "'!");
-			e.printStackTrace();
-			return null;
-		}finally {
-			try {
-				br.close();
-			}catch (Exception e) {}
-		}
+		return shaderProvider.getFileContentAsString(name);
 	}
 	
 	public boolean bind() {

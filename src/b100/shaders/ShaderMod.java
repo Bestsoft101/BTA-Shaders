@@ -19,7 +19,6 @@ public class ShaderMod {
 	public static ShaderModConfig config;
 	
 	private static File minecraftDirectory;
-	private static File shaderDirectory;
 	private static File shaderPackDirectory;
 	private static File configFile;
 	
@@ -30,6 +29,8 @@ public class ShaderMod {
 	
 	public static boolean enableNormals = false;
 	public static boolean enableSpecular = false;
+	
+	private static ShaderProvider currentShaderPack;
 	
 	static {
 		grabInstanceAndDirectory();
@@ -49,15 +50,10 @@ public class ShaderMod {
 		configFile = new File(configDirectory, "shaders.cfg");
 		
 		config = new ShaderModConfig(mc);
-		config.load();
 	}
 	
-	public static File getShaderDirectory() {
-		return shaderDirectory;
-	}
-	
-	public static File getCurrentShaderPackFile() {
-		return shaderDirectory;
+	public static ShaderProvider getCurrentShaderPack() {
+		return currentShaderPack;
 	}
 	
 	public static File getShaderPackDirectory() {
@@ -68,32 +64,10 @@ public class ShaderMod {
 		return configFile;
 	}
 	
-	public static boolean isShaderPack(File file) {
-		if(file.isDirectory()) {
-			File shaderJson = new File(file, "shader.json");
-			return shaderJson.exists();
-		}
-//		if(file.isFile() && file.getName().toLowerCase().endsWith(".zip")) {
-//			ZipFile zipFile = null;
-//			try {
-//				zipFile = new ZipFile(file);
-//				
-//				return zipFile.getEntry("/shader.json") != null;
-//			}catch (Exception e) {
-//				e.printStackTrace();
-//			}finally {
-//				try {
-//					zipFile.close();
-//				}catch (Exception e) {}
-//			}
-//		}
-		return false;
-	}
-	
-	public static boolean isShaderPackSelected(File file) {
-		if(file == null && shaderDirectory == null) return true;
-		if(file == null || shaderDirectory == null) return false;
-		return file.equals(shaderDirectory);
+	public static boolean isShaderPackSelected(ShaderProvider shaderProvider) {
+		if(shaderProvider == null && currentShaderPack == null) return true;
+		if(shaderProvider == null || currentShaderPack == null) return false;
+		return shaderProvider.equals(currentShaderPack);
 	}
 	
 	public static void log(String string) {
@@ -107,9 +81,15 @@ public class ShaderMod {
 		}
 	}
 	
-	public static void setShaderpack(File file) {
-		log("Set Shaderpack: " + (file != null ? file.getName() : "(None)"));
-		shaderDirectory = file;
+	public static void setShaderpack(ShaderProvider shaderProvider) {
+		Thread.dumpStack();
+		
+		if(currentShaderPack != null) {
+			currentShaderPack.close();
+		}
+		
+		log("Set Shaderpack: " + (shaderProvider != null ? shaderProvider.getName() : "(None)"));
+		currentShaderPack = shaderProvider;
 		
 		if(mc.renderer != null) {
 			ShaderRenderer shaderRenderer = (ShaderRenderer) mc.renderer;

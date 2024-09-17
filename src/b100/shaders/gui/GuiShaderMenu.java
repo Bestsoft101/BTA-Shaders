@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Set;
 
 import b100.shaders.ShaderMod;
+import b100.shaders.ShaderProvider;
 import b100.shaders.gui.util.ActionListener;
 import net.minecraft.core.util.helper.Utils;
 
@@ -24,7 +25,7 @@ public class GuiShaderMenu extends GuiScreen implements ActionListener {
 	public GuiButton buttonOpenFolder;
 	public GuiButton buttonDone;
 	
-	private Map<String, File> idToShaderpackMap = new HashMap<>();
+	private Map<String, ShaderProvider> idToShaderpackMap = new HashMap<>();
 	private Set<String> shaderPacks = new HashSet<>();
 	private List<String> tempShaderPacks = new ArrayList<>();
 	
@@ -77,10 +78,11 @@ public class GuiShaderMenu extends GuiScreen implements ActionListener {
 		for(int i=0; i < files.length; i++) {
 			File file = files[i];
 			
-			if(ShaderMod.isShaderPack(file)) {
+			ShaderProvider shaderProvider = ShaderProvider.getShaderProvider(file);
+			if(shaderProvider != null) {
 				String id = file.getName() + file.isDirectory() + file.lastModified() + file.length();
 				tempShaderPacks.add(id);
-				idToShaderpackMap.put(id, file);
+				idToShaderpackMap.put(id, shaderProvider);
 			}
 		}
 		
@@ -108,7 +110,7 @@ public class GuiShaderMenu extends GuiScreen implements ActionListener {
 		scrollPane.elements.add(new ShaderPackButton(this, null));
 		
 		for(int i=0; i < tempShaderPacks.size(); i++) {
-			File file = idToShaderpackMap.get(tempShaderPacks.get(i));
+			ShaderProvider file = idToShaderpackMap.get(tempShaderPacks.get(i));
 			ShaderPackButton shaderPackButton = new ShaderPackButton(this, file);
 			scrollPane.elements.add(shaderPackButton);
 		}
@@ -117,7 +119,7 @@ public class GuiShaderMenu extends GuiScreen implements ActionListener {
 			if(scrollPane.elements.get(i) instanceof ShaderPackButton) {
 				ShaderPackButton shaderPackButton = (ShaderPackButton) scrollPane.elements.get(i);
 				focusGroup.add(shaderPackButton);
-				if(ShaderMod.isShaderPackSelected(shaderPackButton.file)) {
+				if(ShaderMod.isShaderPackSelected(shaderPackButton.shaderProvider)) {
 					shaderPackButton.setFocused(true);
 				}
 			}
@@ -163,14 +165,14 @@ public class GuiShaderMenu extends GuiScreen implements ActionListener {
 	
 	public static class ShaderPackButton extends GuiFocusButton {
 
-		public final File file;
+		public final ShaderProvider shaderProvider;
 		
-		public ShaderPackButton(GuiScreen screen, File file) {
+		public ShaderPackButton(GuiScreen screen, ShaderProvider shaderProvider) {
 			super(screen);
-			this.file = file;
+			this.shaderProvider = shaderProvider;
 			
-			if(file != null) {
-				this.text = file.getName();	
+			if(shaderProvider != null) {
+				this.text = shaderProvider.getName();	
 			}else {
 				this.text = "(None)";
 			}
@@ -181,10 +183,9 @@ public class GuiShaderMenu extends GuiScreen implements ActionListener {
 			super.onFocusChanged();
 			
 			if(isFocused() && screen.isInitialized()) {
-				ShaderMod.setShaderpack(file);
+				ShaderMod.setShaderpack(shaderProvider);
 			}
 		}
-		
 	}
 
 	@Override

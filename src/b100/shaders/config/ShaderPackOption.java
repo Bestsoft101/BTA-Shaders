@@ -3,21 +3,26 @@ package b100.shaders.config;
 import java.io.File;
 
 import b100.shaders.ShaderMod;
+import b100.shaders.ShaderProvider;
 
 public class ShaderPackOption implements ConfigEntry {
 
 	@Override
 	public String getValue() {
-		File shaderpack = ShaderMod.getCurrentShaderPackFile();
-		if(shaderpack == null) {
+		ShaderProvider shaderProvider = ShaderMod.getCurrentShaderPack();
+		if(shaderProvider == null) {
 			return "";
 		}
-		return shaderpack.getName();
+		return shaderProvider.getName();
 	}
 
 	@Override
 	public void read(String value) {
-		ShaderMod.setShaderpack(new File(ShaderMod.getShaderPackDirectory(), value));
+		File shaderPackFile = new File(ShaderMod.getShaderPackDirectory(), value);
+		ShaderProvider shaderProvider = ShaderProvider.getShaderProvider(shaderPackFile);
+		if(shaderPackFile != null) {
+			ShaderMod.setShaderpack(shaderProvider);	
+		}
 	}
 
 	@Override
