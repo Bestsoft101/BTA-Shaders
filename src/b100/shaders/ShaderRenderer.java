@@ -44,7 +44,7 @@ public class ShaderRenderer implements Renderer, CustomRenderer {
 	private final List<RenderPass> baseRenderPasses = new ArrayList<>();
 	
 	// Don't build strings every frame
-	private static final String[] colortexStrings = new String[] {"colortex0", "colortex1", "colortex2", "colortex3", "colortex4", "colortex5", "colortex6", "colortex7"};
+	private static final String[] colortexStrings = new String[] { "colortex0", "colortex1", "colortex2", "colortex3", "colortex4", "colortex5", "colortex6", "colortex7", "colortex8", "colortex9", "colortex10", "colortex11", "colortex12", "colortex13", "colortex14", "colortex15" };
 	
 	private boolean isSetup = false;
 
